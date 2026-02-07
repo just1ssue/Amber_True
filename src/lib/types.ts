@@ -40,6 +40,7 @@ export type GameState = {
   phase: Phase;
   round: number;
   prompt: Prompt;
+  activeMemberIds: string[];
   submissions: Record<string, Submission>;
   votes: Record<string, Vote>;
   scores: Record<string, number>;

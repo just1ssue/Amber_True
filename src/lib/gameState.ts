@@ -11,6 +11,7 @@ export function createInitialGameState(
     phase: "ANSWER",
     round: 1,
     prompt: buildPrompt(data),
+    activeMemberIds: [hostId],
     submissions: {},
     votes: {},
     scores: {},

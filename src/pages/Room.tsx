@@ -1,36 +1,52 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { createInitialGameState } from "../lib/gameState";
+import { fetchPrompts } from "../lib/prompts";
+import { getRoomStateAdapter } from "../lib/stateAdapter";
 import type { GameState, PromptsJson } from "../lib/types";
 import { buildPrompt } from "../lib/prompt";
 import { getOrCreateDisplayName, getOrCreateUserId } from "../lib/storage";
-import { subscribeRoomState, updateRoomState } from "../lib/stateAdapter";
 
 const MAX_MEMBERS = 8;
 
 export function Room() {
   const { roomId = "" } = useParams();
+  const adapter = useMemo(() => getRoomStateAdapter(), []);
   const userId = useMemo(() => getOrCreateUserId(), []);
   const name = useMemo(() => getOrCreateDisplayName(), []);
 
   const [data, setData] = useState<PromptsJson | null>(null);
+  const [isPromptsLoading, setIsPromptsLoading] = useState(true);
+  const [promptsError, setPromptsError] = useState("");
   const [game, setGame] = useState<GameState | null>(null);
   const [joinError, setJoinError] = useState<string>("");
 
   const [answerText, setAnswerText] = useState("");
 
+  async function loadPrompts() {
+    setIsPromptsLoading(true);
+    setPromptsError("");
+    try {
+      const next = await fetchPrompts(import.meta.env.BASE_URL);
+      setData(next);
+    } catch (e) {
+      setData(null);
+      setPromptsError(e instanceof Error ? e.message : "promptsの読み込みに失敗しました");
+    } finally {
+      setIsPromptsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}prompts.json`)
-      .then((r) => r.json())
-      .then((j) => setData(j));
+    void loadPrompts();
   }, []);
 
   useEffect(() => {
     if (!data || !roomId) return;
-    const unsub = subscribeRoomState(roomId, setGame);
+    const unsub = adapter.subscribe(roomId, setGame);
     let isFull = false;
     const now = Date.now();
-    const next = updateRoomState(roomId, (prev) => {
+    const next = adapter.update(roomId, (prev) => {
       if (!prev) {
         return createInitialGameState(data, userId, name, now);
       }
@@ -39,8 +55,13 @@ export function Room() {
         isFull = true;
         return prev;
       }
+      const activeMemberIds =
+        prev.activeMemberIds && prev.activeMemberIds.length > 0
+          ? prev.activeMemberIds
+          : Object.keys(prev.members);
       return {
         ...prev,
+        activeMemberIds,
         members: {
           ...prev.members,
           [userId]: {
@@ -55,40 +76,66 @@ export function Room() {
 
     return () => {
       unsub();
-      updateRoomState(roomId, (prev) => {
+      adapter.update(roomId, (prev) => {
         if (!prev || !prev.members[userId]) return prev;
         const members = { ...prev.members };
         delete members[userId];
         const nextMemberIds = Object.keys(members);
         if (nextMemberIds.length === 0) return null;
+        const nextActiveMemberIds = prev.activeMemberIds.filter((id) => id !== userId);
+        const activeMemberIds =
+          nextActiveMemberIds.length > 0 ? nextActiveMemberIds : nextMemberIds;
         const nextHostId = prev.hostId === userId ? nextMemberIds[0] : prev.hostId;
         return {
           ...prev,
+          activeMemberIds,
           members,
           hostId: nextHostId,
         };
       });
     };
-  }, [data, name, roomId, userId]);
+  }, [adapter, data, name, roomId, userId]);
+
+  if (promptsError) {
+    return (
+      <div className="card">
+        <div className="h1">Room: {roomId}</div>
+        <div className="muted">{promptsError}</div>
+        <div style={{ marginTop: 8 }}>
+          <button className="btn btn--secondary" onClick={() => void loadPrompts()}>
+            再読み込み
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!game) {
     return (
       <div className="card">
         <div className="h1">Room: {roomId}</div>
-        <div className="muted">{joinError || "loading..."}</div>
+        <div className="muted">{joinError || (isPromptsLoading ? "loading..." : "初期化中...")}</div>
       </div>
     );
   }
 
   const memberIds = Object.keys(game.members);
+  const activeMemberIds =
+    game.activeMemberIds.length > 0
+      ? game.activeMemberIds.filter((id) => Boolean(game.members[id]))
+      : memberIds;
   const isHost = game.hostId === userId;
+  const isActiveRoundMember = activeMemberIds.includes(userId);
   const mySubmitted = Boolean(game.submissions[userId]);
   const myVoted = Boolean(game.votes[userId]);
-  const allSubmitted = memberIds.length > 0 && memberIds.every((id) => Boolean(game.submissions[id]));
-  const allVoted = memberIds.length > 0 && memberIds.every((id) => Boolean(game.votes[id]));
+  const allSubmitted =
+    activeMemberIds.length > 0 && activeMemberIds.every((id) => Boolean(game.submissions[id]));
+  const allVoted =
+    activeMemberIds.length > 0 && activeMemberIds.every((id) => Boolean(game.votes[id]));
+  const mySubmissionText = game.submissions[userId]?.text ?? "";
 
   function applyGameUpdate(updater: (prev: GameState) => GameState) {
-    const next = updateRoomState(roomId, (prev) => {
+    const next = adapter.update(roomId, (prev) => {
       if (!prev) return prev;
       return updater(prev);
     });
@@ -97,7 +144,7 @@ export function Room() {
 
   function submitAnswer() {
     const text = answerText.trim();
-    if (text.length === 0 || mySubmitted) return;
+    if (text.length === 0 || mySubmitted || !isActiveRoundMember) return;
     applyGameUpdate((prev) => ({
       ...prev,
       submissions: {
@@ -144,13 +191,14 @@ export function Room() {
       round: prev.round + 1,
       phase: "ANSWER",
       prompt: buildPrompt(data),
+      activeMemberIds: Object.keys(prev.members),
       submissions: {},
       votes: {},
     }));
   }
 
   function castVote(targetUserId: string) {
-    if (myVoted) return;
+    if (myVoted || !isActiveRoundMember) return;
     applyGameUpdate((prev) => ({
       ...prev,
       votes: {
@@ -171,10 +219,35 @@ export function Room() {
           room member: {memberIds.length}
         </div>
         <div className="meta-chip">
+          round member: {activeMemberIds.length}
+        </div>
+        <div className="meta-chip">
           host: <code>{game.hostId}</code>
         </div>
       </div>
       {joinError && <div className="muted">{joinError}</div>}
+      {!isActiveRoundMember && (
+        <div className="muted">
+          このラウンドは観戦モードです。次ラウンド開始時に参加対象へ入ります。
+        </div>
+      )}
+
+      <div className="section">
+        <div className="h2">参加者</div>
+        <div className="list">
+          {memberIds.map((id) => (
+            <div className="card phase-card" key={id}>
+              <div>
+                {game.members[id]?.name ?? id} {id === game.hostId ? "(host)" : ""}
+              </div>
+              <div className="muted">
+                {activeMemberIds.includes(id) ? "参加中" : "観戦中"} / 提出:{" "}
+                {game.submissions[id] ? "済" : "-"} / 投票: {game.votes[id] ? "済" : "-"}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="section">
         <div className="phase-head">
@@ -202,7 +275,7 @@ export function Room() {
             />
             <button
               className="btn btn--secondary"
-              disabled={mySubmitted || answerText.trim().length === 0}
+              disabled={mySubmitted || answerText.trim().length === 0 || !isActiveRoundMember}
               onClick={submitAnswer}
             >
               提出
@@ -212,8 +285,14 @@ export function Room() {
             </button>
           </div>
           <div className="muted" style={{ marginTop: 8 }}>
-            {Object.keys(game.submissions).length}/{memberIds.length} 人が提出済み
+            {activeMemberIds.filter((id) => Boolean(game.submissions[id])).length}/{activeMemberIds.length} 人が提出済み
           </div>
+          {mySubmitted && (
+            <div className="card phase-card" style={{ marginTop: 8 }}>
+              <div className="muted">あなたの提出内容</div>
+              <div>{mySubmissionText}</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -228,7 +307,7 @@ export function Room() {
                 <div>{submission.text}</div>
                 <button
                   className="btn btn--secondary"
-                  disabled={myVoted}
+                  disabled={myVoted || !isActiveRoundMember}
                   onClick={() => castVote(submitterId)}
                 >
                   これに投票
@@ -243,7 +322,7 @@ export function Room() {
             </button>
           </div>
           <div className="muted" style={{ marginTop: 8 }}>
-            {Object.keys(game.votes).length}/{memberIds.length} 人が投票済み
+            {activeMemberIds.filter((id) => Boolean(game.votes[id])).length}/{activeMemberIds.length} 人が投票済み
           </div>
         </div>
       )}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createInitialGameState } from "../lib/gameState";
-import { loadRoomState, saveRoomState } from "../lib/stateAdapter";
+import { fetchPrompts } from "../lib/prompts";
+import { getRoomStateAdapter } from "../lib/stateAdapter";
 import { getOrCreateDisplayName, getOrCreateUserId, setDisplayName } from "../lib/storage";
 import type { PromptsJson } from "../lib/types";
 
@@ -16,19 +17,23 @@ function randomRoomId(): string {
 }
 
 function generateAvailableRoomId(): string {
+  const adapter = getRoomStateAdapter();
   for (let i = 0; i < ROOM_ID_RETRY; i += 1) {
     const id = randomRoomId();
-    if (!loadRoomState(id)) return id;
+    if (!adapter.load(id)) return id;
   }
   return randomRoomId();
 }
 
 export function Home() {
   const nav = useNavigate();
+  const adapter = useMemo(() => getRoomStateAdapter(), []);
   const userId = useMemo(() => getOrCreateUserId(), []);
   const [name, setName] = useState(getOrCreateDisplayName());
   const [roomId, setRoomId] = useState("");
   const [prompts, setPrompts] = useState<PromptsJson | null>(null);
+  const [isPromptsLoading, setIsPromptsLoading] = useState(true);
+  const [promptsError, setPromptsError] = useState("");
   const [joinNotice, setJoinNotice] = useState("");
   const [recentRoomIds, setRecentRoomIds] = useState<string[]>(() => {
     const raw = localStorage.getItem(RECENT_ROOM_IDS_KEY);
@@ -41,11 +46,22 @@ export function Home() {
     }
   });
 
+  async function loadPrompts() {
+    setIsPromptsLoading(true);
+    setPromptsError("");
+    try {
+      const next = await fetchPrompts(import.meta.env.BASE_URL);
+      setPrompts(next);
+    } catch (e) {
+      setPrompts(null);
+      setPromptsError(e instanceof Error ? e.message : "promptsの読み込みに失敗しました");
+    } finally {
+      setIsPromptsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}prompts.json`)
-      .then((r) => r.json())
-      .then((j) => setPrompts(j))
-      .catch(() => setPrompts(null));
+    void loadPrompts();
   }, []);
 
   const canJoin = useMemo(() => roomId.trim().length > 0, [roomId]);
@@ -53,7 +69,7 @@ export function Home() {
   function checkJoinable(nextRoomId: string): { ok: boolean; message: string } {
     const id = nextRoomId.trim();
     if (!id) return { ok: false, message: "" };
-    const state = loadRoomState(id);
+    const state = adapter.load(id);
     if (!state) {
       return { ok: true, message: "このルームは未作成です。参加すると新規ルームとして開始されます。" };
     }
@@ -105,16 +121,28 @@ export function Home() {
 
       <div className="section">
         <div className="h2">ルーム作成</div>
+        {isPromptsLoading && <div className="muted">お題データを読み込み中です...</div>}
+        {promptsError && (
+          <div className="muted">
+            {promptsError}
+            <div style={{ marginTop: 8 }}>
+              <button className="btn btn--secondary" onClick={() => void loadPrompts()}>
+                再読み込み
+              </button>
+            </div>
+          </div>
+        )}
         <button
           className="btn btn--primary"
+          disabled={isPromptsLoading || Boolean(promptsError)}
           onClick={() => {
             if (!prompts) {
-              setJoinNotice("お題データ読み込み中です。少し待ってから作成してください。");
+              setJoinNotice("お題データが未読込です。再読み込み後に作成してください。");
               return;
             }
             const id = generateAvailableRoomId();
             const initial = createInitialGameState(prompts, userId, name);
-            saveRoomState(id, initial);
+            adapter.save(id, initial);
             rememberRoomId(id);
             nav(`/room/${id}`);
           }}
