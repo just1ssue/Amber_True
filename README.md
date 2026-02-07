@@ -14,6 +14,29 @@
 
 ---
 
+## 現在の実装状況
+
+### 実装済み
+- Hash Routerで `/#/room/<roomId>` ルーティング
+- Homeでルーム作成/参加、表示名保存
+- Homeでルーム参加前チェック（満員時ブロック）
+- Homeで最近使ったルームID履歴（最大5件）
+- Roomの3フェーズ進行（ANSWER / VOTE / RESULT）
+- 回答匿名表示（VOTE）と公開表示（RESULT）
+- 同率1位の全員加点
+- 共有状態を `GameState` で固定
+- `stateAdapter`（localStorage）経由で状態更新を集約
+- 同一PC別タブでルーム状態同期（`storage`イベント）
+- 退出時のメンバー除外、host離脱時の移譲
+- UTF-8固定（`.editorconfig`）
+
+### 未実装（次フェーズ）
+- Liveblocks等のリアルタイム同期基盤
+- 参加者一覧UIの強化
+- Sheets→`public/prompts.json` 同期ワークフローの本実装
+
+---
+
 ## ゲーム仕様（概要）
 
 ### ルーム
@@ -65,7 +88,11 @@
 - `public/prompts.json` … 生成されたお題JSON（静的配布）
 - `src/pages/Home.tsx` … ルーム作成/参加
 - `src/pages/Room.tsx` … ルーム（ゲーム画面の雛形）
-- `src/lib/` … 型/抽選/ユーティリティ
+- `src/lib/types.ts` … 型定義（`GameState`含む）
+- `src/lib/prompt.ts` … 重み付き抽選
+- `src/lib/stateAdapter.ts` … ローカル同期層（localStorage）
+- `src/lib/gameState.ts` … 初期ゲーム状態生成
+- `src/lib/storage.ts` … userId/displayNameの永続化
 
 ---
 
@@ -92,8 +119,7 @@ npm run preview
 ---
 
 ## 次の作業（推奨順）
-1. Home: ルーム作成/参加のUI確定（roomId生成、表示名入力）
-2. Room: フェーズUIの雛形（ANSWER/VOTE/RESULT）
-3. 共有状態の設計を固定（phase/round/prompt/submissions/votes/scores）
-4. 同期基盤（例: Liveblocks）を差し替え可能な形で組み込む
-5. GitHub Actions: Sheets→JSON生成を実動にする（Secrets設定）
+1. `stateAdapter` を interface 化し、Liveblocks実装を追加
+2. 参加者一覧UI/接続状態UI/host権限UIを追加
+3. ルーム内エラーハンドリング（prompts取得失敗時など）を改善
+4. GitHub ActionsでSheets→JSON生成を実動化（Secrets設定）

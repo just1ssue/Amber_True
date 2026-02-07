@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import { createInitialGameState } from "../lib/gameState";
 import type { GameState, PromptsJson } from "../lib/types";
 import { buildPrompt } from "../lib/prompt";
 import { getOrCreateDisplayName, getOrCreateUserId } from "../lib/storage";
+import { subscribeRoomState, updateRoomState } from "../lib/stateAdapter";
+
+const MAX_MEMBERS = 8;
 
 export function Room() {
   const { roomId = "" } = useParams();
@@ -11,6 +15,7 @@ export function Room() {
 
   const [data, setData] = useState<PromptsJson | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
+  const [joinError, setJoinError] = useState<string>("");
 
   const [answerText, setAnswerText] = useState("");
 
@@ -21,29 +26,56 @@ export function Room() {
   }, []);
 
   useEffect(() => {
-    if (!data) return;
-    setGame({
-      phase: "ANSWER",
-      round: 1,
-      prompt: buildPrompt(data),
-      submissions: {},
-      votes: {},
-      scores: {},
-      members: {
-        [userId]: {
-          name,
-          joinedAt: Date.now(),
+    if (!data || !roomId) return;
+    const unsub = subscribeRoomState(roomId, setGame);
+    let isFull = false;
+    const now = Date.now();
+    const next = updateRoomState(roomId, (prev) => {
+      if (!prev) {
+        return createInitialGameState(data, userId, name, now);
+      }
+      const isJoined = Boolean(prev.members[userId]);
+      if (!isJoined && Object.keys(prev.members).length >= MAX_MEMBERS) {
+        isFull = true;
+        return prev;
+      }
+      return {
+        ...prev,
+        members: {
+          ...prev.members,
+          [userId]: {
+            name,
+            joinedAt: prev.members[userId]?.joinedAt ?? now,
+          },
         },
-      },
-      hostId: userId,
+      };
     });
-  }, [data, name, userId]);
+    setGame(next);
+    setJoinError(isFull ? "このルームは満員です（最大8人）。" : "");
+
+    return () => {
+      unsub();
+      updateRoomState(roomId, (prev) => {
+        if (!prev || !prev.members[userId]) return prev;
+        const members = { ...prev.members };
+        delete members[userId];
+        const nextMemberIds = Object.keys(members);
+        if (nextMemberIds.length === 0) return null;
+        const nextHostId = prev.hostId === userId ? nextMemberIds[0] : prev.hostId;
+        return {
+          ...prev,
+          members,
+          hostId: nextHostId,
+        };
+      });
+    };
+  }, [data, name, roomId, userId]);
 
   if (!game) {
     return (
       <div className="card">
         <div className="h1">Room: {roomId}</div>
-        <div className="muted">loading...</div>
+        <div className="muted">{joinError || "loading..."}</div>
       </div>
     );
   }
@@ -55,35 +87,38 @@ export function Room() {
   const allSubmitted = memberIds.length > 0 && memberIds.every((id) => Boolean(game.submissions[id]));
   const allVoted = memberIds.length > 0 && memberIds.every((id) => Boolean(game.votes[id]));
 
+  function applyGameUpdate(updater: (prev: GameState) => GameState) {
+    const next = updateRoomState(roomId, (prev) => {
+      if (!prev) return prev;
+      return updater(prev);
+    });
+    setGame(next);
+  }
+
   function submitAnswer() {
     const text = answerText.trim();
     if (text.length === 0 || mySubmitted) return;
-    setGame((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        submissions: {
-          ...prev.submissions,
-          [userId]: {
-            text,
-            submittedAt: Date.now(),
-          },
+    applyGameUpdate((prev) => ({
+      ...prev,
+      submissions: {
+        ...prev.submissions,
+        [userId]: {
+          text,
+          submittedAt: Date.now(),
         },
-      };
-    });
+      },
+    }));
     setAnswerText("");
   }
 
   function startVoteIfReady() {
     if (!isHost || !allSubmitted) return;
-    setGame((prev) => (prev ? { ...prev, phase: "VOTE" } : prev));
+    applyGameUpdate((prev) => ({ ...prev, phase: "VOTE" }));
   }
 
   function showResult() {
     if (!isHost || !allVoted) return;
-
-    setGame((prev) => {
-      if (!prev) return prev;
+    applyGameUpdate((prev) => {
       const tally: Record<string, number> = {};
       for (const v of Object.values(prev.votes)) {
         tally[v.targetUserId] = (tally[v.targetUserId] ?? 0) + 1;
@@ -104,31 +139,25 @@ export function Room() {
 
   function nextRound() {
     if (!isHost || !data) return;
-    setGame((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        round: prev.round + 1,
-        phase: "ANSWER",
-        prompt: buildPrompt(data),
-        submissions: {},
-        votes: {},
-      };
-    });
+    applyGameUpdate((prev) => ({
+      ...prev,
+      round: prev.round + 1,
+      phase: "ANSWER",
+      prompt: buildPrompt(data),
+      submissions: {},
+      votes: {},
+    }));
   }
 
   function castVote(targetUserId: string) {
     if (myVoted) return;
-    setGame((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        votes: {
-          ...prev.votes,
-          [userId]: { targetUserId },
-        },
-      };
-    });
+    applyGameUpdate((prev) => ({
+      ...prev,
+      votes: {
+        ...prev.votes,
+        [userId]: { targetUserId },
+      },
+    }));
   }
 
   return (
@@ -148,6 +177,7 @@ export function Room() {
       <div className="muted">
         host: <code>{game.hostId}</code> / members: {memberIds.length}
       </div>
+      {joinError && <div className="muted">{joinError}</div>}
 
       {game.phase === "ANSWER" && (
         <>
