@@ -85,87 +85,97 @@ export function Home() {
       <div className="h1">Amber_True（モック）</div>
       <div className="muted">非ログインで参加できるお題ゲーム。投票は匿名、結果で公開。同率は全員加点。</div>
 
-      <div className="h2">表示名</div>
-      <input
-        className="input"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="表示名"
-      />
-      <div style={{ marginTop: 8 }}>
-        <button
-          className="btn"
-          onClick={() => setDisplayName(name.trim() || name)}
-        >
-          保存
-        </button>
-      </div>
-
-      <div className="h2">ルーム作成</div>
-      <button
-        className="btn"
-        onClick={() => {
-          if (!prompts) {
-            setJoinNotice("お題データ読み込み中です。少し待ってから作成してください。");
-            return;
-          }
-          const id = generateAvailableRoomId();
-          const initial = createInitialGameState(prompts, userId, name);
-          saveRoomState(id, initial);
-          rememberRoomId(id);
-          nav(`/room/${id}`);
-        }}
-      >
-        新しいルームを作成
-      </button>
-
-      <div className="h2">ルーム参加</div>
-      <div className="row">
+      <div className="section">
+        <div className="h2">表示名</div>
         <input
           className="input"
-          value={roomId}
-          onChange={(e) => {
-            const next = e.target.value;
-            setRoomId(next);
-            const result = checkJoinable(next);
-            setJoinNotice(result.message);
-          }}
-          placeholder="ルームID"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="表示名"
         />
+        <div style={{ marginTop: 8 }}>
+          <button
+            className="btn btn--secondary"
+            onClick={() => setDisplayName(name.trim() || name)}
+          >
+            保存
+          </button>
+        </div>
+      </div>
+
+      <div className="section">
+        <div className="h2">ルーム作成</div>
         <button
-          className="btn"
-          disabled={!canJoin}
-          onClick={handleJoin}
+          className="btn btn--primary"
+          onClick={() => {
+            if (!prompts) {
+              setJoinNotice("お題データ読み込み中です。少し待ってから作成してください。");
+              return;
+            }
+            const id = generateAvailableRoomId();
+            const initial = createInitialGameState(prompts, userId, name);
+            saveRoomState(id, initial);
+            rememberRoomId(id);
+            nav(`/room/${id}`);
+          }}
         >
-          参加
+          新しいルームを作成
         </button>
       </div>
-      {joinNotice && <div className="muted" style={{ marginTop: 8 }}>{joinNotice}</div>}
 
-      <div className="h2">最近のルーム</div>
-      {recentRoomIds.length === 0 ? (
-        <div className="muted">履歴はまだありません</div>
-      ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {recentRoomIds.map((id) => (
-            <button
-              key={id}
-              className="btn"
-              onClick={() => {
-                setRoomId(id);
-                const result = checkJoinable(id);
-                setJoinNotice(result.message);
-              }}
-            >
-              {id}
-            </button>
-          ))}
+      <div className="section">
+        <div className="h2">ルーム参加</div>
+        <div className="row">
+          <input
+            className="input"
+            value={roomId}
+            onChange={(e) => {
+              const next = e.target.value;
+              setRoomId(next);
+              const result = checkJoinable(next);
+              setJoinNotice(result.message);
+            }}
+            placeholder="ルームID"
+          />
+          <button
+            className="btn btn--secondary"
+            disabled={!canJoin}
+            onClick={handleJoin}
+          >
+            参加
+          </button>
         </div>
-      )}
+        {joinNotice && <div className="muted" style={{ marginTop: 8 }}>{joinNotice}</div>}
+      </div>
 
-      <div className="h2">メモ</div>
-      <div className="muted">
-        GitHub Pages向けに Hash Router を使用しています。URLは <code>/#/room/&lt;roomId&gt;</code> 形式になります。
+      <div className="section">
+        <div className="h2">最近のルーム</div>
+        {recentRoomIds.length === 0 ? (
+          <div className="muted">履歴はまだありません</div>
+        ) : (
+          <div className="row">
+            {recentRoomIds.map((id) => (
+              <button
+                key={id}
+                className="btn btn--ghost"
+                onClick={() => {
+                  setRoomId(id);
+                  const result = checkJoinable(id);
+                  setJoinNotice(result.message);
+                }}
+              >
+                {id}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="section">
+        <div className="h2">メモ</div>
+        <div className="muted">
+          GitHub Pages向けに Hash Router を使用しています。URLは <code>/#/room/&lt;roomId&gt;</code> 形式になります。
+        </div>
       </div>
     </div>
   );

@@ -163,24 +163,34 @@ export function Room() {
   return (
     <div className="card">
       <div className="h1">Room: {roomId}</div>
-      <div className="muted">
-        user: <code>{name}</code> / <code>{userId}</code>（モック）
-      </div>
-
-      <div className="h2">Round {game.round}</div>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="muted">お題</div>
-        <div style={{ fontSize: 18, fontWeight: 700 }}>{game.prompt.text}</div>
-      </div>
-
-      <div className="h2">Phase: {game.phase}</div>
-      <div className="muted">
-        host: <code>{game.hostId}</code> / members: {memberIds.length}
+      <div className="meta-grid">
+        <div className="meta-chip">
+          user: <code>{name}</code>
+        </div>
+        <div className="meta-chip">
+          room member: {memberIds.length}
+        </div>
+        <div className="meta-chip">
+          host: <code>{game.hostId}</code>
+        </div>
       </div>
       {joinError && <div className="muted">{joinError}</div>}
 
+      <div className="section">
+        <div className="phase-head">
+          <div className="h2">Round {game.round}</div>
+          <div className="phase-pill" data-phase={game.phase}>
+            {game.phase}
+          </div>
+        </div>
+        <div className="card phase-card">
+          <div className="muted">お題</div>
+          <div className="prompt">{game.prompt.text}</div>
+        </div>
+      </div>
+
       {game.phase === "ANSWER" && (
-        <>
+        <div className="section">
           <div className="muted">回答を入力して送信（モック：ローカルのみ）</div>
           <div className="row" style={{ marginTop: 8 }}>
             <input
@@ -191,33 +201,33 @@ export function Room() {
               disabled={mySubmitted}
             />
             <button
-              className="btn"
+              className="btn btn--secondary"
               disabled={mySubmitted || answerText.trim().length === 0}
               onClick={submitAnswer}
             >
               提出
             </button>
-            <button className="btn" onClick={startVoteIfReady} disabled={!isHost || !allSubmitted}>
+            <button className="btn btn--primary" onClick={startVoteIfReady} disabled={!isHost || !allSubmitted}>
               投票へ
             </button>
           </div>
           <div className="muted" style={{ marginTop: 8 }}>
             {Object.keys(game.submissions).length}/{memberIds.length} 人が提出済み
           </div>
-        </>
+        </div>
       )}
 
       {game.phase === "VOTE" && (
-        <>
+        <div className="section">
           <div className="muted">投票フェーズ：回答者は匿名表示（結果で公開）</div>
-          <div style={{ marginTop: 12 }}>
+          <div className="list" style={{ marginTop: 12 }}>
             {Object.keys(game.submissions).length === 0 && <div className="muted">提出がありません</div>}
             {Object.entries(game.submissions).map(([submitterId, submission]) => (
-              <div className="card" key={submitterId} style={{ marginBottom: 8 }}>
+              <div className="card phase-card" key={submitterId}>
                 <div className="muted">回答者: 匿名</div>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>{submission.text}</div>
+                <div>{submission.text}</div>
                 <button
-                  className="btn"
+                  className="btn btn--secondary"
                   disabled={myVoted}
                   onClick={() => castVote(submitterId)}
                 >
@@ -228,34 +238,36 @@ export function Room() {
           </div>
 
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="btn" onClick={showResult} disabled={!isHost || !allVoted}>
+            <button className="btn btn--primary" onClick={showResult} disabled={!isHost || !allVoted}>
               結果へ
             </button>
           </div>
           <div className="muted" style={{ marginTop: 8 }}>
             {Object.keys(game.votes).length}/{memberIds.length} 人が投票済み
           </div>
-        </>
+        </div>
       )}
 
       {game.phase === "RESULT" && (
-        <>
+        <div className="section">
           <div className="muted">結果フェーズ：回答者を公開、同率は全員加点</div>
 
           <div className="h2">回答一覧（公開）</div>
-          {Object.entries(game.submissions).map(([submitterId, submission]) => (
-            <div className="card" key={submitterId} style={{ marginBottom: 8 }}>
-              <div className="muted">回答者: {game.members[submitterId]?.name ?? "Unknown"}</div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{submission.text}</div>
-              <div className="muted">score: {game.scores[submitterId] ?? 0}</div>
-            </div>
-          ))}
+          <div className="list">
+            {Object.entries(game.submissions).map(([submitterId, submission]) => (
+              <div className="card phase-card" key={submitterId}>
+                <div className="muted">回答者: {game.members[submitterId]?.name ?? "Unknown"}</div>
+                <div>{submission.text}</div>
+                <div className="muted">score: {game.scores[submitterId] ?? 0}</div>
+              </div>
+            ))}
+          </div>
 
           <div className="h2">スコア</div>
           {Object.keys(game.scores).length === 0 ? (
             <div className="muted">まだ得点がありません</div>
           ) : (
-            <ul>
+            <ul className="score-list">
               {Object.entries(game.scores).map(([uid, sc]) => (
                 <li key={uid}>
                   <code>{game.members[uid]?.name ?? uid}</code>: {sc}
@@ -264,18 +276,20 @@ export function Room() {
             </ul>
           )}
 
-          <button className="btn" onClick={nextRound} disabled={!isHost}>
+          <button className="btn btn--primary" onClick={nextRound} disabled={!isHost}>
             次のラウンド
           </button>
-        </>
+        </div>
       )}
 
-      <div className="h2">TODO（モック→本番）</div>
-      <ul className="muted">
-        <li>リアルタイム同期（Liveblocks等）に置き換え</li>
-        <li>参加者一覧/最大8人制限/全員提出→投票などの進行を実装</li>
-        <li>GitHub ActionsでSheets→prompts.jsonの自動生成を実動化</li>
-      </ul>
+      <div className="section">
+        <div className="h2">TODO（モック→本番）</div>
+        <ul className="muted">
+          <li>リアルタイム同期（Liveblocks等）に置き換え</li>
+          <li>参加者一覧/最大8人制限/全員提出→投票などの進行を実装</li>
+          <li>GitHub ActionsでSheets→prompts.jsonの自動生成を実動化</li>
+        </ul>
+      </div>
     </div>
   );
 }
