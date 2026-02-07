@@ -1,0 +1,21 @@
+name: Sync prompts (Sheets -> JSON)
+
+on:
+  workflow_dispatch: {}
+
+# NOTE:
+# - 初期は「手動実行」でOK（workflow_dispatch）
+# - Secrets に Sheets 読み取り用の認証情報を保存して実装します
+# - ここは雛形のみ（詳細実装は後で追加）
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: TODO
+        run: |
+          echo "TODO: Fetch Google Sheets and generate public/prompts.json"
+          echo "This workflow is a placeholder for now."

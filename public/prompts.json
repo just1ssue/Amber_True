@@ -1,0 +1,24 @@
+{
+  "version": "2026-02-07T08:31:28Z",
+  "modifier": [
+    {
+      "id": "m_001",
+      "text": "最高に",
+      "weight": 1
+    }
+  ],
+  "situation": [
+    {
+      "id": "s_001",
+      "text": "修羅場の会議で",
+      "weight": 1
+    }
+  ],
+  "content": [
+    {
+      "id": "c_001",
+      "text": "一言で笑わせて",
+      "weight": 1
+    }
+  ]
+}
