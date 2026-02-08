@@ -63,21 +63,40 @@
 
 ---
 
-## 現在のローカルモック実装（2026-02-07時点）
+## 現在のローカルモック実装（2026-02-08時点）
 
 - 共有状態は `GameState` で固定し、`Room` はこの単一状態を更新
+- 共有状態に `activeMemberIds` があり、ラウンド参加対象を固定（途中参加は次ラウンドから）
 - 共有状態の保存/読込は `src/lib/stateAdapter.ts` に集約
 - 同一PCの別タブで `storage` イベントによりルーム状態同期
 - ルーム参加上限8人を適用（満員時は入室不可）
 - ルーム退出時に `members` から除外、host離脱時は次メンバーへ移譲
 - Homeでルーム作成時に初期状態を作成して保存してから遷移
 - Homeに最近使ったルームID履歴（最大5件）を表示
+- Home/Roomで `prompts.json` 読み込み失敗時にエラー表示と再読み込みを実装
 - お題はSQLiteからJSON生成（`npm run prompts:init` / `npm run prompts:sync`）
+- 同期アダプタは `RoomStateAdapter` interface で差し替え可能
+- `VITE_ROOM_ADAPTER=liveblocks` は雛形経由で現状localにフォールバック
 
 ---
 
 ## 直近の未実装
 
-- 完全なリアルタイム同期基盤（Liveblocks等）への差し替え
-- SQLite編集UI（必要であれば）
 - Liveblocks本実装（認証APIを含む）
+- SQLite編集UI（必要であれば）
+- SQLite運用ルールの固定（誰がDB更新するか、更新頻度、レビュー手順）
+
+---
+
+## 引き継ぎメモ
+
+- お題を更新する基本手順:
+  1. `data/prompts.db` を編集
+  2. `npm run prompts:sync`
+  3. `public/prompts.json` の差分確認
+- 初回環境構築:
+  - `npm install`
+  - `npm run prompts:init`
+- 既知の注意:
+  - `prompts:init` はDBが空の場合のみseedする（既存データは上書きしない）
+  - GitHub Actionsの同期workflowはSQLite前提で動作

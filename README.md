@@ -28,12 +28,16 @@
 - `stateAdapter`（localStorage）経由で状態更新を集約
 - 同一PC別タブでルーム状態同期（`storage`イベント）
 - 退出時のメンバー除外、host離脱時の移譲
+- `activeMemberIds` によるラウンド参加対象固定（途中参加は次ラウンドから）
+- 観戦モード表示（対象外メンバーは提出/投票不可）
+- 参加者一覧で提出/投票ステータスを表示
+- Home/Roomで prompts 読み込み失敗時の再読み込みUI
 - UTF-8固定（`.editorconfig`）
 
 ### 未実装（次フェーズ）
 - Liveblocks等のリアルタイム同期基盤
-- 参加者一覧UIの強化
 - SQLite編集UI（必要なら）
+- 運用向けのDB更新フロー整備（レビュー手順/担当）
 
 ### 同期アダプタ切替
 - `src/lib/stateAdapter.ts` でアダプタを選択
@@ -92,6 +96,12 @@
 - JSON生成（DB -> `public/prompts.json`）
   - `npm run prompts:sync`
 
+### 日常運用（推奨）
+1. `data/prompts.db` を更新
+2. `npm run prompts:sync`
+3. `public/prompts.json` の差分確認
+4. 必要ファイルをコミット
+
 ### GitHub Actions 同期（手動実行）
 - Workflow: `.github/workflows/sync-prompts.yml`
 - Trigger: `workflow_dispatch`（手動）
@@ -142,7 +152,6 @@ npm run preview
 ---
 
 ## 次の作業（推奨順）
-1. `stateAdapter` を interface 化し、Liveblocks実装を追加
-2. 参加者一覧UI/接続状態UI/host権限UIを追加
-3. ルーム内エラーハンドリング（prompts取得失敗時など）を改善
-4. SQLiteを編集しやすくする運用（GUIツール or 管理画面）を整備
+1. Liveblocks本実装（認証API + adapter差し替え）
+2. SQLite編集運用の整備（担当・レビュー・反映フロー）
+3. SQLite編集UI（必要に応じて）

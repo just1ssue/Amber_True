@@ -1,23 +1,23 @@
 {
-  "version": "2026-02-08T05:46:39.626Z",
+  "version": "2026-02-08T07:29:24.840Z",
   "modifier": [
     {
       "id": "m_001",
-      "text": "最高に",
+      "text": "悪魔が",
       "weight": 1
     }
   ],
   "situation": [
     {
       "id": "s_001",
-      "text": "修羅場の会議で",
+      "text": "朝起きた時に",
       "weight": 1
     }
   ],
   "content": [
     {
       "id": "c_001",
-      "text": "一言で笑わせて",
+      "text": "食べたいものは？",
       "weight": 1
     }
   ]
