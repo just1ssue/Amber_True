@@ -39,7 +39,7 @@ a {
 }
 
 .container {
-  max-width: 980px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 20px 16px 48px;
 }
@@ -55,6 +55,10 @@ a {
 
 .card + .card {
   margin-top: 10px;
+}
+
+.room-layout > .card + .card {
+  margin-top: 0;
 }
 
 .row {
@@ -178,6 +182,16 @@ a {
   line-height: 1.35;
 }
 
+.prompt--large {
+  font-size: 34px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.prompt-modifier {
+  color: #ff5a5a;
+}
+
 .meta-grid {
   display: grid;
   gap: 8px;
@@ -205,6 +219,23 @@ a {
   padding-left: 18px;
 }
 
+.room-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.room-sidebar {
+  align-self: stretch;
+  height: 100%;
+}
+
+.room-main {
+  min-width: 0;
+  height: 100%;
+}
+
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
@@ -225,5 +256,17 @@ code {
 
   .prompt {
     font-size: 18px;
+  }
+
+  .prompt--large {
+    font-size: 26px;
+  }
+
+  .room-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .room-sidebar {
+    position: static;
   }
 }
