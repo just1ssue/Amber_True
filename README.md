@@ -78,6 +78,16 @@
   - `enabled`（0/1）
   - `weight`（任意・未指定は1）
 
+### カテゴリ別編集ビュー
+`npm run prompts:init` 実行時に、以下の編集用ビューが自動で作成されます。
+
+- `prompts_modifier`
+- `prompts_situation`
+- `prompts_content`
+
+これらのビューには `INSTEAD OF` トリガーが設定されており、`INSERT / UPDATE / DELETE` を行うと内部的に `prompts` テーブルへ反映されます。  
+カテゴリ列を意識せずに、カテゴリ単位で編集できます。
+
 ### 生成されるJSON（例）
 `public/prompts.json`
 
@@ -93,8 +103,32 @@
 ### ローカル同期コマンド
 - 初期化（DB作成 + 初期データ投入）
   - `npm run prompts:init`
+- CSV一括投入（`data/prompts.bulk.csv` -> DB）
+  - `npm run prompts:import`
 - JSON生成（DB -> `public/prompts.json`）
   - `npm run prompts:sync`
+
+### CSVでまとめて編集する
+編集用CSVは `data/prompts.bulk.csv`（UTF-8）です。1ファイルで3カテゴリを管理できます。
+
+ヘッダ:
+
+```csv
+id,category,text,enabled,weight
+```
+
+- `id`: 一意キー（既存IDなら上書き更新）
+- `category`: `modifier` / `situation` / `content`
+- `text`: お題本文
+- `enabled`: `1` or `0`（未指定は `1`）
+- `weight`: 正の数（未指定は `1`）
+
+CSV反映手順:
+1. `data/prompts.bulk.csv` を編集
+2. `npm run prompts:import`
+3. `public/prompts.json` の差分確認
+
+`npm run prompts:import` 実行時に `prompts:sync` は自動実行されます。
 
 ### 日常運用（推奨）
 1. `data/prompts.db` を更新

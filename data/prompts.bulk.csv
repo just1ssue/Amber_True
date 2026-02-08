@@ -1,0 +1,4 @@
+id,category,text,enabled,weight
+m_1001,modifier,めちゃくちゃ丁寧に,1,1
+s_1001,situation,最終面接の冒頭で,1,1
+c_1001,content,30秒で自己紹介して,1,1

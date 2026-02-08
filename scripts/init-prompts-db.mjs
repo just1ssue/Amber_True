@@ -14,6 +14,123 @@ function ensureSchema(db) {
       weight REAL NOT NULL DEFAULT 1 CHECK (weight > 0),
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE VIEW IF NOT EXISTS prompts_modifier AS
+      SELECT id, text, enabled, weight, created_at
+      FROM prompts
+      WHERE category = 'modifier';
+
+    CREATE VIEW IF NOT EXISTS prompts_situation AS
+      SELECT id, text, enabled, weight, created_at
+      FROM prompts
+      WHERE category = 'situation';
+
+    CREATE VIEW IF NOT EXISTS prompts_content AS
+      SELECT id, text, enabled, weight, created_at
+      FROM prompts
+      WHERE category = 'content';
+
+    CREATE TRIGGER IF NOT EXISTS prompts_modifier_insert
+    INSTEAD OF INSERT ON prompts_modifier
+    BEGIN
+      INSERT INTO prompts (id, category, text, enabled, weight, created_at)
+      VALUES (
+        NEW.id,
+        'modifier',
+        NEW.text,
+        COALESCE(NEW.enabled, 1),
+        COALESCE(NEW.weight, 1),
+        COALESCE(NEW.created_at, datetime('now'))
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_modifier_update
+    INSTEAD OF UPDATE ON prompts_modifier
+    BEGIN
+      UPDATE prompts
+      SET
+        id = NEW.id,
+        text = NEW.text,
+        enabled = COALESCE(NEW.enabled, enabled),
+        weight = COALESCE(NEW.weight, weight),
+        created_at = COALESCE(NEW.created_at, created_at)
+      WHERE id = OLD.id AND category = 'modifier';
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_modifier_delete
+    INSTEAD OF DELETE ON prompts_modifier
+    BEGIN
+      DELETE FROM prompts
+      WHERE id = OLD.id AND category = 'modifier';
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_situation_insert
+    INSTEAD OF INSERT ON prompts_situation
+    BEGIN
+      INSERT INTO prompts (id, category, text, enabled, weight, created_at)
+      VALUES (
+        NEW.id,
+        'situation',
+        NEW.text,
+        COALESCE(NEW.enabled, 1),
+        COALESCE(NEW.weight, 1),
+        COALESCE(NEW.created_at, datetime('now'))
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_situation_update
+    INSTEAD OF UPDATE ON prompts_situation
+    BEGIN
+      UPDATE prompts
+      SET
+        id = NEW.id,
+        text = NEW.text,
+        enabled = COALESCE(NEW.enabled, enabled),
+        weight = COALESCE(NEW.weight, weight),
+        created_at = COALESCE(NEW.created_at, created_at)
+      WHERE id = OLD.id AND category = 'situation';
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_situation_delete
+    INSTEAD OF DELETE ON prompts_situation
+    BEGIN
+      DELETE FROM prompts
+      WHERE id = OLD.id AND category = 'situation';
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_content_insert
+    INSTEAD OF INSERT ON prompts_content
+    BEGIN
+      INSERT INTO prompts (id, category, text, enabled, weight, created_at)
+      VALUES (
+        NEW.id,
+        'content',
+        NEW.text,
+        COALESCE(NEW.enabled, 1),
+        COALESCE(NEW.weight, 1),
+        COALESCE(NEW.created_at, datetime('now'))
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_content_update
+    INSTEAD OF UPDATE ON prompts_content
+    BEGIN
+      UPDATE prompts
+      SET
+        id = NEW.id,
+        text = NEW.text,
+        enabled = COALESCE(NEW.enabled, enabled),
+        weight = COALESCE(NEW.weight, weight),
+        created_at = COALESCE(NEW.created_at, created_at)
+      WHERE id = OLD.id AND category = 'content';
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS prompts_content_delete
+    INSTEAD OF DELETE ON prompts_content
+    BEGIN
+      DELETE FROM prompts
+      WHERE id = OLD.id AND category = 'content';
+    END;
   `);
 }
 

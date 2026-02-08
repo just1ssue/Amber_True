@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "prompts:init": "node scripts/init-prompts-db.mjs",
+    "prompts:import": "node scripts/import-prompts-from-csv.mjs && npm run prompts:sync",
     "prompts:sync": "node scripts/sync-prompts-from-sqlite.mjs"
   },
   "dependencies": {
