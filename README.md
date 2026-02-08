@@ -46,8 +46,16 @@
 ### 同期アダプタ切替
 - `src/lib/stateAdapter.ts` でアダプタを選択
 - 環境変数 `VITE_ROOM_ADAPTER` を使用（既定: `local`）
-- `VITE_ROOM_ADAPTER=liveblocks` を指定すると Liveblocks用アダプタ雛形を通ります  
-  現在は認証API未導入のため、内部的に local へフォールバックします
+- `VITE_ROOM_ADAPTER=liveblocks` を指定すると Liveblocksアダプタを使用
+- 認証設定は以下の順で解決
+  - `VITE_LIVEBLOCKS_AUTH_ENDPOINT`（推奨、`POST { room }` で token を返す）
+  - `VITE_LIVEBLOCKS_PUBLIC_KEY`（暫定）
+- 認証設定がない場合や初期化失敗時は local へフォールバック
+- `RoomStateAdapter` の契約は `src/lib/roomStateAdapterTypes.ts` を参照
+  - `load/save/update/subscribe` は同期I/Fとして統一
+  - `update` は read-modify-write を担う
+- `src/lib/liveblocksAdapter.ts` で local とLiveblocksをミラー
+  - `authEndpoint` 使用時は `cache: no-store` で認証APIを呼び出し
 
 ---
 

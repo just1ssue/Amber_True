@@ -76,7 +76,9 @@
 - Home/Roomで `prompts.json` 読み込み失敗時にエラー表示と再読み込みを実装
 - お題はSQLiteからJSON生成（`npm run prompts:init` / `npm run prompts:sync`）
 - 同期アダプタは `RoomStateAdapter` interface で差し替え可能
-- `VITE_ROOM_ADAPTER=liveblocks` は雛形経由で現状localにフォールバック
+- `VITE_ROOM_ADAPTER=liveblocks` で Liveblocks アダプタを使用
+- 認証設定は `VITE_LIVEBLOCKS_AUTH_ENDPOINT` 優先、未設定時のみ `VITE_LIVEBLOCKS_PUBLIC_KEY`
+- 認証設定なし/初期化失敗時はlocalへフォールバック
 - `src/lib/debugTools.ts` にdev用デバッグ補助関数を分離
 - dev環境のRoomにデバッグ機能を追加
   - 8人参加の仮想化

@@ -6,6 +6,7 @@ import { getRoomStateAdapter } from "../lib/stateAdapter";
 import type { GameState, PromptsJson } from "../lib/types";
 import { buildPrompt } from "../lib/prompt";
 import { getOrCreateDisplayName, getOrCreateUserId } from "../lib/storage";
+import { areAllSubmitted, areAllVoted, toResultState, toVoteState } from "../lib/roundLogic";
 import {
   buildDebugActiveMemberIds,
   debugMemberName,
@@ -49,24 +50,6 @@ function hashString(input: string): number {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
-}
-
-function toResultState(prev: GameState): GameState {
-  const tally: Record<string, number> = {};
-  for (const v of Object.values(prev.votes)) {
-    tally[v.targetUserId] = (tally[v.targetUserId] ?? 0) + 1;
-  }
-  const max = Math.max(0, ...Object.values(tally));
-  const winners = Object.entries(tally)
-    .filter(([, n]) => n === max && max > 0)
-    .map(([uid]) => uid);
-  const nextScores = { ...prev.scores };
-  for (const w of winners) nextScores[w] = (nextScores[w] ?? 0) + 1;
-  return {
-    ...prev,
-    phase: "RESULT",
-    scores: nextScores,
-  };
 }
 
 export function Room() {
@@ -206,10 +189,8 @@ export function Room() {
   const canRerollPrompt = import.meta.env.DEV && isHost && game.phase === "ANSWER" && Boolean(data);
   const mySubmitted = Boolean(game.submissions[userId]);
   const myVoted = Boolean(game.votes[userId]);
-  const allSubmitted =
-    activeMemberIds.length > 0 && activeMemberIds.every((id) => Boolean(game.submissions[id]));
-  const allVoted =
-    activeMemberIds.length > 0 && activeMemberIds.every((id) => Boolean(game.votes[id]));
+  const allSubmitted = areAllSubmitted(game, activeMemberIds);
+  const allVoted = areAllVoted(game, activeMemberIds);
   const mySubmissionText = game.submissions[userId]?.text ?? "";
   const textCard = data?.text.find((x) => x.id === game.prompt.textId);
   const modifierCard = data?.modifier.find((x) => x.id === game.prompt.modifierId);
@@ -284,7 +265,7 @@ export function Room() {
       return;
     }
     if (!allSubmitted) return;
-    applyGameUpdate((prev) => ({ ...prev, phase: "VOTE" }));
+    applyGameUpdate((prev) => toVoteState(prev));
   }
 
   function showResult() {
