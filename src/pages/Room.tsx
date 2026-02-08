@@ -35,6 +35,33 @@ function mockSubmissionText(index: number): string {
   return `デバッグ回答 ${index + 1}`;
 }
 
+function userInitial(name: string): string {
+  const normalized = name.trim();
+  if (!normalized) return "?";
+  return normalized[0].toUpperCase();
+}
+
+function seededRandom(seed: number): () => number {
+  let x = (seed ^ 0x9e3779b9) >>> 0;
+  return () => {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    return (x >>> 0) / 4294967296;
+  };
+}
+
+function avatarStyle(seed: string) {
+  const rand = seededRandom(hashString(seed));
+  const hue = Math.floor(rand() * 360);
+  const sat = 38 + Math.floor(rand() * 20);
+  const lightTop = 50 + Math.floor(rand() * 10);
+  const lightBottom = 34 + Math.floor(rand() * 10);
+  return {
+    background: `linear-gradient(180deg, hsl(${hue} ${sat}% ${lightTop}%), hsl(${hue} ${sat}% ${lightBottom}%))`,
+  };
+}
+
 function hashString(input: string): number {
   let h = 2166136261;
   for (let i = 0; i < input.length; i += 1) {
@@ -196,6 +223,7 @@ export function Room() {
   const isHost = game.hostId === userId;
   const isActiveRoundMember = activeMemberIds.includes(userId);
   const canUseDebugButton = import.meta.env.DEV && isHost && game.phase === "ANSWER";
+  const canRerollPrompt = import.meta.env.DEV && isHost && game.phase === "ANSWER" && Boolean(data);
   const mySubmitted = Boolean(game.submissions[userId]);
   const myVoted = Boolean(game.votes[userId]);
   const allSubmitted =
@@ -324,6 +352,14 @@ export function Room() {
     setDebugRound(game.round);
   }
 
+  function rerollPrompt() {
+    if (!data || !canRerollPrompt) return;
+    applyGameUpdate((prev) => ({
+      ...prev,
+      prompt: buildPrompt(data),
+    }));
+  }
+
   return (
     <div className="room-layout">
       <aside className="card room-sidebar">
@@ -353,8 +389,12 @@ export function Room() {
           <div className="list">
             {memberIdsForView.map((id) => (
               <div className="card phase-card member-tile" key={id}>
-                <div>
-                  {getDisplayName(id)} {id === game.hostId ? "(host)" : ""}
+                <div className="member-tile__head">
+                  <span className="member-avatar" style={avatarStyle(id)} aria-hidden="true">
+                    {userInitial(getDisplayName(id))}
+                  </span>
+                  <span className="member-name">{getDisplayName(id)}</span>
+                  {id === game.hostId && <span className="member-badge">host</span>}
                 </div>
                 <div className="muted">
                   {activeMemberIds.includes(id) ? "参加中" : "観戦中"} / 提出:{" "}
@@ -395,6 +435,9 @@ export function Room() {
               <div className="row" style={{ marginTop: 8 }}>
                 <button className="btn btn--ghost" onClick={activateDebugRound}>
                   {isDebugRoundEnabled ? "デバッグ8人: 有効" : "デバッグ8人を有効化"}
+                </button>
+                <button className="btn btn--ghost" onClick={rerollPrompt} disabled={!canRerollPrompt}>
+                  お題をリロール
                 </button>
               </div>
             )}
@@ -472,7 +515,16 @@ export function Room() {
             <div className="list list--answers list--answers-result">
               {Object.entries(game.submissions).map(([submitterId, submission]) => (
                 <div className="card phase-card result-card" key={submitterId}>
-                  <div className="muted result-card__author">回答者: {getDisplayName(submitterId)}</div>
+                  <div className="result-card__author-head">
+                    <span
+                      className="member-avatar member-avatar--sm"
+                      style={avatarStyle(submitterId)}
+                      aria-hidden="true"
+                    >
+                      {userInitial(getDisplayName(submitterId))}
+                    </span>
+                    <span className="muted">回答者: {getDisplayName(submitterId)}</span>
+                  </div>
                   <div className="result-card__text">{submission.text}</div>
                   <div className="muted result-card__score">score: {game.scores[submitterId] ?? 0}</div>
                 </div>
