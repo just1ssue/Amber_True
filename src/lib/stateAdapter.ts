@@ -1,19 +1,11 @@
 import type { GameState } from "./types";
+import { createLiveblocksRoomStateAdapter } from "./liveblocksAdapter";
+import type { RoomStateAdapter, RoomStateUpdater, RoomStateListener } from "./roomStateAdapterTypes";
 
 const KEY_PREFIX = "amber_true_room_state:";
 
 function roomKey(roomId: string): string {
   return `${KEY_PREFIX}${roomId}`;
-}
-
-export type RoomStateUpdater = (prev: GameState | null) => GameState | null;
-export type RoomStateListener = (state: GameState | null) => void;
-
-export interface RoomStateAdapter {
-  load(roomId: string): GameState | null;
-  save(roomId: string, state: GameState): GameState;
-  update(roomId: string, updater: RoomStateUpdater): GameState | null;
-  subscribe(roomId: string, listener: RoomStateListener): () => void;
 }
 
 export const localRoomStateAdapter: RoomStateAdapter = {
@@ -51,5 +43,7 @@ export const localRoomStateAdapter: RoomStateAdapter = {
 };
 
 export function getRoomStateAdapter(): RoomStateAdapter {
+  const mode = import.meta.env.VITE_ROOM_ADAPTER ?? "local";
+  if (mode === "liveblocks") return createLiveblocksRoomStateAdapter(localRoomStateAdapter);
   return localRoomStateAdapter;
 }

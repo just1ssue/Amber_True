@@ -366,7 +366,7 @@ export function Room() {
         <ul className="muted">
           <li>リアルタイム同期（Liveblocks等）に置き換え</li>
           <li>参加者一覧/最大8人制限/全員提出→投票などの進行を実装</li>
-          <li>GitHub ActionsでSheets→prompts.jsonの自動生成を実動化</li>
+          <li>GitHub ActionsでSQLite→prompts.jsonの自動生成を運用</li>
         </ul>
       </div>
     </div>

@@ -1,12 +1,10 @@
-name: Sync prompts (Sheets -> JSON)
+name: Sync prompts (SQLite -> JSON)
 
 on:
   workflow_dispatch: {}
 
-# NOTE:
-# - 初期は「手動実行」でOK（workflow_dispatch）
-# - Secrets に Sheets 読み取り用の認証情報を保存して実装します
-# - ここは雛形のみ（詳細実装は後で追加）
+permissions:
+  contents: write
 
 jobs:
   sync:
@@ -15,7 +13,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: TODO
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure prompts DB exists
+        run: npm run prompts:init
+
+      - name: Sync prompts.json from SQLite
+        run: npm run prompts:sync
+
+      - name: Commit and push if changed
         run: |
-          echo "TODO: Fetch Google Sheets and generate public/prompts.json"
-          echo "This workflow is a placeholder for now."
+          if git diff --quiet -- public/prompts.json; then
+            echo "No changes in prompts.json"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/prompts.json
+          git commit -m "chore: sync prompts.json from sqlite"
+          git push

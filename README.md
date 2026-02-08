@@ -5,12 +5,12 @@
 - PJ名: `Amber_True`
 - 対象: まずはモック（無料・簡単・運用ラク）を最速で作る
 - ホスティング: **GitHub Pages（静的）**
-- お題管理: **Google スプレッドシート → GitHub Actions で JSON に変換して同梱（方案B）**
+- お題管理: **SQLite（ローカル）→ `public/prompts.json` を生成して同梱**
 - ルーティング: **Hash Router**（Pagesの404回避）
 - 投票: **投票時は匿名化、結果（得点）で公開**
 - 同率: **同率1位は全員加点**
 
-> 注意: 方案Bは `prompts.json` が静的配布されるため、URLを知っていれば誰でも閲覧できます（秘匿はしない前提）。
+> 注意: `prompts.json` は静的配布されるため、URLを知っていれば誰でも閲覧できます（秘匿はしない前提）。
 
 ---
 
@@ -33,7 +33,13 @@
 ### 未実装（次フェーズ）
 - Liveblocks等のリアルタイム同期基盤
 - 参加者一覧UIの強化
-- Sheets→`public/prompts.json` 同期ワークフローの本実装
+- SQLite編集UI（必要なら）
+
+### 同期アダプタ切替
+- `src/lib/stateAdapter.ts` でアダプタを選択
+- 環境変数 `VITE_ROOM_ADAPTER` を使用（既定: `local`）
+- `VITE_ROOM_ADAPTER=liveblocks` を指定すると Liveblocks用アダプタ雛形を通ります  
+  現在は認証API未導入のため、内部的に local へフォールバックします
 
 ---
 
@@ -57,15 +63,15 @@
 
 ---
 
-## お題データ（Sheets → JSON）
+## お題データ（SQLite → JSON）
 
-### 推奨フォーマット（1シート方式）
-- Spreadsheet: `prompts` シート
+### DBスキーマ（`data/prompts.db`）
+- テーブル: `prompts`
 - カラム:
-  - `id`（一意）
+  - `id`（TEXT / PK）
   - `category`（`modifier` / `situation` / `content`）
   - `text`
-  - `enabled`（TRUE/FALSE）
+  - `enabled`（0/1）
   - `weight`（任意・未指定は1）
 
 ### 生成されるJSON（例）
@@ -80,11 +86,26 @@
 }
 ```
 
+### ローカル同期コマンド
+- 初期化（DB作成 + 初期データ投入）
+  - `npm run prompts:init`
+- JSON生成（DB -> `public/prompts.json`）
+  - `npm run prompts:sync`
+
+### GitHub Actions 同期（手動実行）
+- Workflow: `.github/workflows/sync-prompts.yml`
+- Trigger: `workflow_dispatch`（手動）
+- 処理:
+  - `npm run prompts:init`
+  - `npm run prompts:sync`
+  - `public/prompts.json` に差分があれば自動コミット
+
 ---
 
 ## ディレクトリ構成（最小）
 
-- `.github/workflows/` … Sheets→JSON同期（手動実行）
+- `.github/workflows/` … SQLite→JSON同期（手動実行）
+- `data/prompts.db` … お題のローカルDB
 - `public/prompts.json` … 生成されたお題JSON（静的配布）
 - `src/pages/Home.tsx` … ルーム作成/参加
 - `src/pages/Room.tsx` … ルーム（ゲーム画面の雛形）
@@ -100,6 +121,8 @@
 
 ```bash
 npm install
+npm run prompts:init
+npm run prompts:sync
 npm run dev
 ```
 
@@ -122,4 +145,4 @@ npm run preview
 1. `stateAdapter` を interface 化し、Liveblocks実装を追加
 2. 参加者一覧UI/接続状態UI/host権限UIを追加
 3. ルーム内エラーハンドリング（prompts取得失敗時など）を改善
-4. GitHub ActionsでSheets→JSON生成を実動化（Secrets設定）
+4. SQLiteを編集しやすくする運用（GUIツール or 管理画面）を整備

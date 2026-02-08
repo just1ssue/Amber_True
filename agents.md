@@ -9,7 +9,7 @@
 - 名前: Amber_True
 - ホスティング: GitHub Pages（静的）
 - ルーティング: Hash Router（`/#/...`）
-- お題: Google Sheetsで管理し、GitHub Actionsで `public/prompts.json` を更新（手動実行）
+- お題: SQLite（`data/prompts.db`）で管理し、`public/prompts.json` を生成して配布
 - 同率: 同率1位は全員加点
 - 匿名: 投票フェーズでは回答者を匿名表示、結果フェーズで公開
 - 文字コード: UTF-8固定（`.editorconfig`）
@@ -19,8 +19,8 @@
 ## 重要な設計制約
 
 1. **静的サイトのみで秘密情報は扱わない**
-   - Sheets APIの鍵やLiveblocksのSecret等はフロントに置かない。
-   - 方案BではSheetsはActions側で取得しJSON化する。
+   - LiveblocksのSecret等はフロントに置かない。
+   - SQLiteはローカル/CIで扱い、生成結果のみ `public/prompts.json` に出力する。
 
 2. **GitHub PagesのSPA制約**
    - 404回避のためHash Router採用。
@@ -72,11 +72,12 @@
 - ルーム退出時に `members` から除外、host離脱時は次メンバーへ移譲
 - Homeでルーム作成時に初期状態を作成して保存してから遷移
 - Homeに最近使ったルームID履歴（最大5件）を表示
+- お題はSQLiteからJSON生成（`npm run prompts:init` / `npm run prompts:sync`）
 
 ---
 
 ## 直近の未実装
 
 - 完全なリアルタイム同期基盤（Liveblocks等）への差し替え
-- ルーム内の参加者一覧UIと操作権限UIの整理
-- GitHub ActionsのSheets→JSON実処理（現在は雛形）
+- SQLite編集UI（必要であれば）
+- Liveblocks本実装（認証APIを含む）
