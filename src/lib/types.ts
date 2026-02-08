@@ -1,4 +1,4 @@
-export type PromptCategory = "modifier" | "situation" | "content";
+export type PromptCategory = "text" | "modifier" | "content";
 
 export type PromptCard = {
   id: string;
@@ -8,16 +8,16 @@ export type PromptCard = {
 
 export type PromptsJson = {
   version: string;
+  text: PromptCard[];
   modifier: PromptCard[];
-  situation: PromptCard[];
   content: PromptCard[];
 };
 
 export type Phase = "ANSWER" | "VOTE" | "RESULT";
 
 export type Prompt = {
+  textId: string;
   modifierId: string;
-  situationId: string;
   contentId: string;
   text: string;
 };

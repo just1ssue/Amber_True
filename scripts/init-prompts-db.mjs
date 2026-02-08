@@ -8,7 +8,7 @@ function ensureSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS prompts (
       id TEXT PRIMARY KEY,
-      category TEXT NOT NULL CHECK (category IN ('modifier', 'situation', 'content')),
+      category TEXT NOT NULL CHECK (category IN ('text', 'modifier', 'content')),
       text TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
       weight REAL NOT NULL DEFAULT 1 CHECK (weight > 0),
@@ -20,10 +20,10 @@ function ensureSchema(db) {
       FROM prompts
       WHERE category = 'modifier';
 
-    CREATE VIEW IF NOT EXISTS prompts_situation AS
+    CREATE VIEW IF NOT EXISTS prompts_text AS
       SELECT id, text, enabled, weight, created_at
       FROM prompts
-      WHERE category = 'situation';
+      WHERE category = 'text';
 
     CREATE VIEW IF NOT EXISTS prompts_content AS
       SELECT id, text, enabled, weight, created_at
@@ -64,13 +64,13 @@ function ensureSchema(db) {
       WHERE id = OLD.id AND category = 'modifier';
     END;
 
-    CREATE TRIGGER IF NOT EXISTS prompts_situation_insert
-    INSTEAD OF INSERT ON prompts_situation
+    CREATE TRIGGER IF NOT EXISTS prompts_text_insert
+    INSTEAD OF INSERT ON prompts_text
     BEGIN
       INSERT INTO prompts (id, category, text, enabled, weight, created_at)
       VALUES (
         NEW.id,
-        'situation',
+        'text',
         NEW.text,
         COALESCE(NEW.enabled, 1),
         COALESCE(NEW.weight, 1),
@@ -78,8 +78,8 @@ function ensureSchema(db) {
       );
     END;
 
-    CREATE TRIGGER IF NOT EXISTS prompts_situation_update
-    INSTEAD OF UPDATE ON prompts_situation
+    CREATE TRIGGER IF NOT EXISTS prompts_text_update
+    INSTEAD OF UPDATE ON prompts_text
     BEGIN
       UPDATE prompts
       SET
@@ -88,14 +88,14 @@ function ensureSchema(db) {
         enabled = COALESCE(NEW.enabled, enabled),
         weight = COALESCE(NEW.weight, weight),
         created_at = COALESCE(NEW.created_at, created_at)
-      WHERE id = OLD.id AND category = 'situation';
+      WHERE id = OLD.id AND category = 'text';
     END;
 
-    CREATE TRIGGER IF NOT EXISTS prompts_situation_delete
-    INSTEAD OF DELETE ON prompts_situation
+    CREATE TRIGGER IF NOT EXISTS prompts_text_delete
+    INSTEAD OF DELETE ON prompts_text
     BEGIN
       DELETE FROM prompts
-      WHERE id = OLD.id AND category = 'situation';
+      WHERE id = OLD.id AND category = 'text';
     END;
 
     CREATE TRIGGER IF NOT EXISTS prompts_content_insert
@@ -144,7 +144,8 @@ function loadSourceJson(path) {
 function rowsFromPromptsJson(json) {
   if (!json) return [];
   const rows = [];
-  for (const category of ["modifier", "situation", "content"]) {
+  const categories = ["text", "modifier", "content"];
+  for (const category of categories) {
     const list = Array.isArray(json[category]) ? json[category] : [];
     for (const row of list) {
       if (!row?.id || !row?.text) continue;
@@ -157,6 +158,10 @@ function rowsFromPromptsJson(json) {
       });
     }
   }
+  const hasAllCategories = categories.every(
+    (category) => rows.some((row) => row.category === category),
+  );
+  if (!hasAllCategories) return [];
   return rows;
 }
 
@@ -190,9 +195,9 @@ function seedIfEmpty(db, rows) {
   }
 
   runRows([
-    { id: "m_001", category: "modifier", text: "最高に", enabled: 1, weight: 1 },
-    { id: "s_001", category: "situation", text: "修羅場の会議で", enabled: 1, weight: 1 },
-    { id: "c_001", category: "content", text: "一言で笑わせて", enabled: 1, weight: 1 },
+    { id: "t_001", category: "text", text: "「さ」からはじまる", enabled: 1, weight: 1 },
+    { id: "m_001", category: "modifier", text: "悪魔が", enabled: 1, weight: 1 },
+    { id: "c_001", category: "content", text: "朝に食べるものは？", enabled: 1, weight: 1 },
   ]);
   insert.free();
   console.log("Seeded default rows.");

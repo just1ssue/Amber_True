@@ -3,7 +3,7 @@ import initSqlJs from "sql.js";
 
 const DB_PATH = process.env.PROMPTS_DB_PATH || "data/prompts.db";
 const CSV_PATH = process.env.PROMPTS_SOURCE_CSV || "data/prompts.bulk.csv";
-const ALLOWED_CATEGORIES = new Set(["modifier", "situation", "content"]);
+const ALLOWED_CATEGORIES = new Set(["text", "modifier", "content"]);
 
 function parseCsv(text) {
   const rows = [];
@@ -119,7 +119,7 @@ function ensureSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS prompts (
       id TEXT PRIMARY KEY,
-      category TEXT NOT NULL CHECK (category IN ('modifier', 'situation', 'content')),
+      category TEXT NOT NULL CHECK (category IN ('text', 'modifier', 'content')),
       text TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
       weight REAL NOT NULL DEFAULT 1 CHECK (weight > 0),

@@ -13,14 +13,14 @@ function pickWeighted(items: PromptCard[]): PromptCard {
 }
 
 export function buildPrompt(data: PromptsJson): Prompt {
+  const t = pickWeighted(data.text);
   const m = pickWeighted(data.modifier);
-  const s = pickWeighted(data.situation);
   const c = pickWeighted(data.content);
 
   return {
+    textId: t.id,
     modifierId: m.id,
-    situationId: s.id,
     contentId: c.id,
-    text: `${m.text}${s.text}${c.text}`,
+    text: `${t.text} ${m.text} ${c.text}`,
   };
 }

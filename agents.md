@@ -45,7 +45,7 @@
 
 - `phase`: 'ANSWER' | 'VOTE' | 'RESULT'
 - `round`: number
-- `prompt`: { modifierId, situationId, contentId, text }
+- `prompt`: { textId, modifierId, contentId, text }
 - `submissions`: { [userId]: { text, submittedAt } }
 - `votes`: { [voterId]: { targetUserId } }
 - `scores`: { [userId]: number }
@@ -56,7 +56,7 @@
 
 ## お題抽選ルール（最小）
 
-- `modifier/situation/content` から1つずつ抽選
+- `text/modifier/content` から1つずつ抽選
 - `enabled` のみ対象
 - `weight` による重み抽選（未指定は1）
 - 抽選結果は1ラウンド中固定

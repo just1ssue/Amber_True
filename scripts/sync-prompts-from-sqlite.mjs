@@ -7,14 +7,14 @@ const OUTPUT_PATH = process.env.PROMPTS_OUTPUT_JSON || "public/prompts.json";
 function toPromptsJson(rows) {
   const out = {
     version: new Date().toISOString(),
+    text: [],
     modifier: [],
-    situation: [],
     content: [],
   };
 
   for (const row of rows) {
     const category = String(row.category);
-    if (!["modifier", "situation", "content"].includes(category)) continue;
+    if (!["text", "modifier", "content"].includes(category)) continue;
     if (Number(row.enabled) !== 1) continue;
     const card = {
       id: String(row.id),
@@ -24,7 +24,7 @@ function toPromptsJson(rows) {
     out[category].push(card);
   }
 
-  for (const key of ["modifier", "situation", "content"]) {
+  for (const key of ["text", "modifier", "content"]) {
     if (out[key].length === 0) {
       throw new Error(`No enabled prompts in category: ${key}`);
     }

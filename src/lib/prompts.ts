@@ -26,8 +26,8 @@ export async function fetchPrompts(baseUrl: string): Promise<PromptsJson> {
   const obj = json as Record<string, unknown>;
   if (
     typeof obj.version !== "string" ||
+    !assertPromptArray(obj.text) ||
     !assertPromptArray(obj.modifier) ||
-    !assertPromptArray(obj.situation) ||
     !assertPromptArray(obj.content)
   ) {
     throw new Error("prompts.jsonのスキーマが一致しません");

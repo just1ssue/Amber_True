@@ -61,8 +61,8 @@
 
 ### お題生成（カード3枚イメージ）
 - お題は以下3カテゴリから1つずつ抽選し合成
+  - `text`（文頭テーマ）
   - `modifier`（修飾子）
-  - `situation`（場合）
   - `content`（内容）
 
 ---
@@ -73,7 +73,7 @@
 - テーブル: `prompts`
 - カラム:
   - `id`（TEXT / PK）
-  - `category`（`modifier` / `situation` / `content`）
+  - `category`（`text` / `modifier` / `content`）
   - `text`
   - `enabled`（0/1）
   - `weight`（任意・未指定は1）
@@ -82,7 +82,7 @@
 `npm run prompts:init` 実行時に、以下の編集用ビューが自動で作成されます。
 
 - `prompts_modifier`
-- `prompts_situation`
+- `prompts_text`
 - `prompts_content`
 
 これらのビューには `INSTEAD OF` トリガーが設定されており、`INSERT / UPDATE / DELETE` を行うと内部的に `prompts` テーブルへ反映されます。  
@@ -94,8 +94,8 @@
 ```json
 {
   "version": "2026-02-07T00:00:00Z",
+  "text": [{ "id":"t_001", "text":"...", "weight":1 }],
   "modifier": [{ "id":"m_001", "text":"...", "weight":1 }],
-  "situation": [{ "id":"s_001", "text":"...", "weight":1 }],
   "content": [{ "id":"c_001", "text":"...", "weight":1 }]
 }
 ```
@@ -118,7 +118,7 @@ id,category,text,enabled,weight
 ```
 
 - `id`: 一意キー（既存IDなら上書き更新）
-- `category`: `modifier` / `situation` / `content`
+- `category`: `text` / `modifier` / `content`
 - `text`: お題本文
 - `enabled`: `1` or `0`（未指定は `1`）
 - `weight`: 正の数（未指定は `1`）
