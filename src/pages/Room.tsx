@@ -6,34 +6,14 @@ import { getRoomStateAdapter } from "../lib/stateAdapter";
 import type { GameState, PromptsJson } from "../lib/types";
 import { buildPrompt } from "../lib/prompt";
 import { getOrCreateDisplayName, getOrCreateUserId } from "../lib/storage";
+import {
+  buildDebugActiveMemberIds,
+  debugMemberName,
+  isDebugMemberId,
+  mockSubmissionText,
+} from "../lib/debugTools";
 
 const MAX_MEMBERS = 8;
-const DEBUG_MEMBER_PREFIX = "__debug_member_";
-
-function isDebugMemberId(userId: string): boolean {
-  return userId.startsWith(DEBUG_MEMBER_PREFIX);
-}
-
-function debugMemberName(userId: string): string {
-  const num = Number(userId.slice(DEBUG_MEMBER_PREFIX.length));
-  const idx = Number.isFinite(num) ? num + 1 : 0;
-  return `Debug-${String(idx).padStart(2, "0")}`;
-}
-
-function buildDebugActiveMemberIds(baseIds: string[]): string[] {
-  const normalized = Array.from(new Set(baseIds));
-  const out = normalized.slice(0, MAX_MEMBERS);
-  let i = 0;
-  while (out.length < MAX_MEMBERS) {
-    out.push(`${DEBUG_MEMBER_PREFIX}${i}`);
-    i += 1;
-  }
-  return out;
-}
-
-function mockSubmissionText(index: number): string {
-  return `デバッグ回答 ${index + 1}`;
-}
 
 function userInitial(name: string): string {
   const normalized = name.trim();
@@ -214,7 +194,7 @@ export function Room() {
       : memberIds;
   const isDebugRoundEnabled = import.meta.env.DEV && debugRound === game.round;
   const activeMemberIds = isDebugRoundEnabled
-    ? buildDebugActiveMemberIds(baseActiveMemberIds)
+    ? buildDebugActiveMemberIds(baseActiveMemberIds, MAX_MEMBERS)
     : baseActiveMemberIds;
   const debugMemberIds = activeMemberIds.filter((id) => isDebugMemberId(id));
   const memberIdsForView = isDebugRoundEnabled
@@ -281,7 +261,7 @@ export function Room() {
           prev.activeMemberIds.length > 0
             ? prev.activeMemberIds.filter((id) => Boolean(prev.members[id]))
             : Object.keys(prev.members);
-        const debugIds = buildDebugActiveMemberIds(realIds);
+        const debugIds = buildDebugActiveMemberIds(realIds, MAX_MEMBERS);
         const submissions = { ...prev.submissions };
         let generatedIndex = 0;
         for (const id of debugIds) {

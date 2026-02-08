@@ -33,6 +33,10 @@
 - 参加者一覧で提出/投票ステータスを表示
 - Home/Roomで prompts 読み込み失敗時の再読み込みUI
 - UTF-8固定（`.editorconfig`）
+- dev専用デバッグ機能（Room）
+  - 8人参加を仮想化して回答を補完
+  - 非デバッグ参加者の投票完了で自動的にRESULTへ遷移
+  - お題リロールボタンで現在ラウンドのお題を再抽選
 
 ### 未実装（次フェーズ）
 - Liveblocks等のリアルタイム同期基盤
@@ -158,6 +162,7 @@ CSV反映手順:
 - `src/lib/stateAdapter.ts` … ローカル同期層（localStorage）
 - `src/lib/gameState.ts` … 初期ゲーム状態生成
 - `src/lib/storage.ts` … userId/displayNameの永続化
+- `src/lib/debugTools.ts` … dev用デバッグ参加者ロジック
 
 ---
 

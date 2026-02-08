@@ -77,6 +77,11 @@
 - お題はSQLiteからJSON生成（`npm run prompts:init` / `npm run prompts:sync`）
 - 同期アダプタは `RoomStateAdapter` interface で差し替え可能
 - `VITE_ROOM_ADAPTER=liveblocks` は雛形経由で現状localにフォールバック
+- `src/lib/debugTools.ts` にdev用デバッグ補助関数を分離
+- dev環境のRoomにデバッグ機能を追加
+  - 8人参加の仮想化
+  - 投票で非デバッグ参加者が完了したら自動RESULT遷移
+  - お題リロール
 
 ---
 
