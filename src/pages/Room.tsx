@@ -8,6 +8,59 @@ import { buildPrompt } from "../lib/prompt";
 import { getOrCreateDisplayName, getOrCreateUserId } from "../lib/storage";
 
 const MAX_MEMBERS = 8;
+const DEBUG_MEMBER_PREFIX = "__debug_member_";
+
+function isDebugMemberId(userId: string): boolean {
+  return userId.startsWith(DEBUG_MEMBER_PREFIX);
+}
+
+function debugMemberName(userId: string): string {
+  const num = Number(userId.slice(DEBUG_MEMBER_PREFIX.length));
+  const idx = Number.isFinite(num) ? num + 1 : 0;
+  return `Debug-${String(idx).padStart(2, "0")}`;
+}
+
+function buildDebugActiveMemberIds(baseIds: string[]): string[] {
+  const normalized = Array.from(new Set(baseIds));
+  const out = normalized.slice(0, MAX_MEMBERS);
+  let i = 0;
+  while (out.length < MAX_MEMBERS) {
+    out.push(`${DEBUG_MEMBER_PREFIX}${i}`);
+    i += 1;
+  }
+  return out;
+}
+
+function mockSubmissionText(index: number): string {
+  return `デバッグ回答 ${index + 1}`;
+}
+
+function hashString(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function toResultState(prev: GameState): GameState {
+  const tally: Record<string, number> = {};
+  for (const v of Object.values(prev.votes)) {
+    tally[v.targetUserId] = (tally[v.targetUserId] ?? 0) + 1;
+  }
+  const max = Math.max(0, ...Object.values(tally));
+  const winners = Object.entries(tally)
+    .filter(([, n]) => n === max && max > 0)
+    .map(([uid]) => uid);
+  const nextScores = { ...prev.scores };
+  for (const w of winners) nextScores[w] = (nextScores[w] ?? 0) + 1;
+  return {
+    ...prev,
+    phase: "RESULT",
+    scores: nextScores,
+  };
+}
 
 export function Room() {
   const { roomId = "" } = useParams();
@@ -20,6 +73,7 @@ export function Room() {
   const [promptsError, setPromptsError] = useState("");
   const [game, setGame] = useState<GameState | null>(null);
   const [joinError, setJoinError] = useState<string>("");
+  const [debugRound, setDebugRound] = useState<number | null>(null);
 
   const [answerText, setAnswerText] = useState("");
 
@@ -96,6 +150,13 @@ export function Room() {
     };
   }, [adapter, data, name, roomId, userId]);
 
+  useEffect(() => {
+    if (!game || debugRound === null) return;
+    if (game.round !== debugRound) {
+      setDebugRound(null);
+    }
+  }, [debugRound, game]);
+
   if (promptsError) {
     return (
       <div className="card">
@@ -120,12 +181,21 @@ export function Room() {
   }
 
   const memberIds = Object.keys(game.members);
-  const activeMemberIds =
+  const baseActiveMemberIds =
     game.activeMemberIds.length > 0
       ? game.activeMemberIds.filter((id) => Boolean(game.members[id]))
       : memberIds;
+  const isDebugRoundEnabled = import.meta.env.DEV && debugRound === game.round;
+  const activeMemberIds = isDebugRoundEnabled
+    ? buildDebugActiveMemberIds(baseActiveMemberIds)
+    : baseActiveMemberIds;
+  const debugMemberIds = activeMemberIds.filter((id) => isDebugMemberId(id));
+  const memberIdsForView = isDebugRoundEnabled
+    ? Array.from(new Set([...memberIds, ...debugMemberIds]))
+    : memberIds;
   const isHost = game.hostId === userId;
   const isActiveRoundMember = activeMemberIds.includes(userId);
+  const canUseDebugButton = import.meta.env.DEV && isHost && game.phase === "ANSWER";
   const mySubmitted = Boolean(game.submissions[userId]);
   const myVoted = Boolean(game.votes[userId]);
   const allSubmitted =
@@ -137,6 +207,18 @@ export function Room() {
   const modifierCard = data?.modifier.find((x) => x.id === game.prompt.modifierId);
   const contentCard = data?.content.find((x) => x.id === game.prompt.contentId);
   const hasPromptParts = Boolean(textCard && modifierCard && contentCard);
+  const voteSubmissionEntries = (() => {
+    const seed = `${roomId}:${game.round}:vote`;
+    return Object.keys(game.submissions)
+      .sort((a, b) => hashString(`${seed}:${a}`) - hashString(`${seed}:${b}`))
+      .map((id) => [id, game.submissions[id]] as const);
+  })();
+
+  const getDisplayName = (id: string): string => {
+    if (game.members[id]) return game.members[id].name;
+    if (isDebugMemberId(id)) return debugMemberName(id);
+    return id;
+  };
 
   function applyGameUpdate(updater: (prev: GameState) => GameState) {
     const next = adapter.update(roomId, (prev) => {
@@ -163,29 +245,43 @@ export function Room() {
   }
 
   function startVoteIfReady() {
-    if (!isHost || !allSubmitted) return;
+    if (!isHost) return;
+    if (isDebugRoundEnabled) {
+      applyGameUpdate((prev) => {
+        if (prev.round !== debugRound) return prev;
+        const realIds =
+          prev.activeMemberIds.length > 0
+            ? prev.activeMemberIds.filter((id) => Boolean(prev.members[id]))
+            : Object.keys(prev.members);
+        const debugIds = buildDebugActiveMemberIds(realIds);
+        const submissions = { ...prev.submissions };
+        let generatedIndex = 0;
+        for (const id of debugIds) {
+          if (!submissions[id]) {
+            submissions[id] = {
+              text: mockSubmissionText(generatedIndex),
+              submittedAt: Date.now(),
+            };
+            generatedIndex += 1;
+          }
+        }
+
+        return {
+          ...prev,
+          phase: "VOTE",
+          activeMemberIds: debugIds,
+          submissions,
+        };
+      });
+      return;
+    }
+    if (!allSubmitted) return;
     applyGameUpdate((prev) => ({ ...prev, phase: "VOTE" }));
   }
 
   function showResult() {
     if (!isHost || !allVoted) return;
-    applyGameUpdate((prev) => {
-      const tally: Record<string, number> = {};
-      for (const v of Object.values(prev.votes)) {
-        tally[v.targetUserId] = (tally[v.targetUserId] ?? 0) + 1;
-      }
-      const max = Math.max(0, ...Object.values(tally));
-      const winners = Object.entries(tally)
-        .filter(([, n]) => n === max && max > 0)
-        .map(([uid]) => uid);
-      const nextScores = { ...prev.scores };
-      for (const w of winners) nextScores[w] = (nextScores[w] ?? 0) + 1;
-      return {
-        ...prev,
-        phase: "RESULT",
-        scores: nextScores,
-      };
-    });
+    applyGameUpdate((prev) => toResultState(prev));
   }
 
   function nextRound() {
@@ -203,13 +299,29 @@ export function Room() {
 
   function castVote(targetUserId: string) {
     if (myVoted || !isActiveRoundMember) return;
-    applyGameUpdate((prev) => ({
-      ...prev,
-      votes: {
+    applyGameUpdate((prev) => {
+      const votes = {
         ...prev.votes,
         [userId]: { targetUserId },
-      },
-    }));
+      };
+      if (isDebugRoundEnabled && prev.phase === "VOTE") {
+        const realVoterIds = prev.activeMemberIds.filter((id) => !isDebugMemberId(id));
+        const allRealVoted =
+          realVoterIds.length > 0 && realVoterIds.every((id) => Boolean(votes[id]));
+        if (allRealVoted) {
+          return toResultState({ ...prev, votes });
+        }
+      }
+      return {
+        ...prev,
+        votes,
+      };
+    });
+  }
+
+  function activateDebugRound() {
+    if (!game || !canUseDebugButton) return;
+    setDebugRound(game.round);
   }
 
   return (
@@ -221,7 +333,7 @@ export function Room() {
             user: <code>{name}</code>
           </div>
           <div className="meta-chip">
-            room member: {memberIds.length}
+            room member: {memberIdsForView.length}
           </div>
           <div className="meta-chip">
             round member: {activeMemberIds.length}
@@ -239,10 +351,10 @@ export function Room() {
         <div className="section">
           <div className="h2">参加者</div>
           <div className="list">
-            {memberIds.map((id) => (
-              <div className="card phase-card" key={id}>
+            {memberIdsForView.map((id) => (
+              <div className="card phase-card member-tile" key={id}>
                 <div>
-                  {game.members[id]?.name ?? id} {id === game.hostId ? "(host)" : ""}
+                  {getDisplayName(id)} {id === game.hostId ? "(host)" : ""}
                 </div>
                 <div className="muted">
                   {activeMemberIds.includes(id) ? "参加中" : "観戦中"} / 提出:{" "}
@@ -279,6 +391,13 @@ export function Room() {
         {game.phase === "ANSWER" && (
           <div className="section">
             <div className="muted">回答を入力して送信（モック：ローカルのみ）</div>
+            {canUseDebugButton && (
+              <div className="row" style={{ marginTop: 8 }}>
+                <button className="btn btn--ghost" onClick={activateDebugRound}>
+                  {isDebugRoundEnabled ? "デバッグ8人: 有効" : "デバッグ8人を有効化"}
+                </button>
+              </div>
+            )}
             <div className="row" style={{ marginTop: 8 }}>
               <input
                 className="input"
@@ -294,7 +413,11 @@ export function Room() {
               >
                 提出
               </button>
-              <button className="btn btn--primary" onClick={startVoteIfReady} disabled={!isHost || !allSubmitted}>
+              <button
+                className="btn btn--primary"
+                onClick={startVoteIfReady}
+                disabled={!isHost || (!allSubmitted && !isDebugRoundEnabled)}
+              >
                 投票へ
               </button>
             </div>
@@ -313,12 +436,12 @@ export function Room() {
         {game.phase === "VOTE" && (
           <div className="section">
             <div className="muted">投票フェーズ：回答者は匿名表示（結果で公開）</div>
-            <div className="list" style={{ marginTop: 12 }}>
-              {Object.keys(game.submissions).length === 0 && <div className="muted">提出がありません</div>}
-              {Object.entries(game.submissions).map(([submitterId, submission]) => (
-                <div className="card phase-card" key={submitterId}>
+            <div className="list list--answers list--answers-vote" style={{ marginTop: 12 }}>
+              {voteSubmissionEntries.length === 0 && <div className="muted">提出がありません</div>}
+              {voteSubmissionEntries.map(([submitterId, submission]) => (
+                <div className="card phase-card answer-card" key={submitterId}>
                   <div className="muted">回答者: 匿名</div>
-                  <div>{submission.text}</div>
+                  <div className="answer-card__text">{submission.text}</div>
                   <button
                     className="btn btn--secondary"
                     disabled={myVoted || !isActiveRoundMember}
@@ -346,12 +469,12 @@ export function Room() {
             <div className="muted">結果フェーズ：回答者を公開、同率は全員加点</div>
 
             <div className="h2">回答一覧（公開）</div>
-            <div className="list">
+            <div className="list list--answers list--answers-result">
               {Object.entries(game.submissions).map(([submitterId, submission]) => (
-                <div className="card phase-card" key={submitterId}>
-                  <div className="muted">回答者: {game.members[submitterId]?.name ?? "Unknown"}</div>
-                  <div>{submission.text}</div>
-                  <div className="muted">score: {game.scores[submitterId] ?? 0}</div>
+                <div className="card phase-card result-card" key={submitterId}>
+                  <div className="muted result-card__author">回答者: {getDisplayName(submitterId)}</div>
+                  <div className="result-card__text">{submission.text}</div>
+                  <div className="muted result-card__score">score: {game.scores[submitterId] ?? 0}</div>
                 </div>
               ))}
             </div>
@@ -363,7 +486,7 @@ export function Room() {
               <ul className="score-list">
                 {Object.entries(game.scores).map(([uid, sc]) => (
                   <li key={uid}>
-                    <code>{game.members[uid]?.name ?? uid}</code>: {sc}
+                    <code>{getDisplayName(uid)}</code>: {sc}
                   </li>
                 ))}
               </ul>
