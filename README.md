@@ -56,6 +56,83 @@
   - `update` は read-modify-write を担う
 - `src/lib/liveblocksAdapter.ts` で local とLiveblocksをミラー
   - `authEndpoint` 使用時は `cache: no-store` で認証APIを呼び出し
+  - 認証レスポンスは `token` の存在を検証し、不正レスポンス時はエラー扱い
+
+### Liveblocks認証API契約（本番固定）
+- 用途: GitHub Pagesの静的フロントから、外部の認証APIを経由して Liveblocks token を取得する
+- エンドポイント: `VITE_LIVEBLOCKS_AUTH_ENDPOINT` に `https://...` の完全URLを設定する
+- リクエスト:
+  - Method: `POST`
+  - Headers: `Content-Type: application/json`, `Accept: application/json`
+  - Cache: `no-store`
+  - Body: `{ "room": "<roomId>" }`
+- レスポンス（成功）:
+  - HTTP 200
+  - Body: `{ "token": "<liveblocks-access-token>" }`
+- レスポンス（失敗）:
+  - 4xx/5xx + `{ "error": "<code>", "reason": "<detail>" }` を推奨
+  - クライアントは `token` が無い/不正なJSON/HTTPエラー/通信失敗を認証失敗として扱う
+- クライアント動作:
+  - 認証失敗または初期化失敗時は local アダプタにフォールバック
+  - `VITE_LIVEBLOCKS_AUTH_ENDPOINT` 未設定時のみ `VITE_LIVEBLOCKS_PUBLIC_KEY` を使用
+
+### 認証APIデプロイ導線（推奨）
+- フロント: GitHub Pages（現行維持）
+- 認証API: GitHub Pagesとは別ホスティング（例: Cloudflare Workers / Vercel Functions / Netlify Functions）
+- 反映手順:
+  1. 認証APIをデプロイし HTTPS エンドポイントURLを確定
+  2. `.env.local` または CI環境変数に `VITE_LIVEBLOCKS_AUTH_ENDPOINT` を設定
+  3. `VITE_ROOM_ADAPTER=liveblocks` を設定してビルド/配布
+  4. `VITE_LIVEBLOCKS_PUBLIC_KEY` は暫定用としてのみ維持（本番は endpoint 優先）
+
+### エラーテレメトリ（auth/sync）
+- 目的: Liveblocks 認証失敗と同期失敗をクライアント側から収集する
+- 環境変数:
+  - `VITE_TELEMETRY_ENDPOINT` を設定した場合のみ送信（未設定時は送信しない）
+- 送信仕様:
+  - Method: `POST`
+  - Headers: `Content-Type: application/json`, `Accept: application/json`
+  - Cache: `no-store`
+  - Keepalive: `true`
+  - Body:
+
+```json
+{
+  "category": "auth | sync",
+  "code": "string",
+  "reason": "string",
+  "roomId": "optional",
+  "adapter": "liveblocks",
+  "timestamp": "ISO-8601"
+}
+```
+
+- 主なイベント:
+  - `auth_endpoint_error`（`network_error`, `HTTP xxx`, `invalid_json_response` など）
+  - `storage_read_failed`
+  - `storage_subscribe_failed`
+  - `storage_write_failed`
+  - `liveblocks_init_fallback`
+- 注意:
+  - テレメトリ送信失敗はゲーム進行に影響させない
+  - 開発環境（`import.meta.env.DEV`）では `console.warn` にも出力
+
+### Reconnect / Degraded-mode UX方針
+- 原則:
+  - ゲーム進行は止めず、同期異常時はローカル継続を優先する
+  - 同期状態は Room 画面に明示してホスト/参加者が判別できるようにする
+- 状態遷移:
+  - `healthy/liveblocks`: Liveblocks 同期が有効
+  - `degraded/liveblocks`: Liveblocks 接続はあるが storage read/write/subscribe で失敗
+  - `degraded/local`: Liveblocks 初期化不可または未設定で local 継続
+- UI:
+  - 劣化時は「同期状態: 劣化モード」と reason を表示
+  - `再同期を試す` ボタンで `adapter.load(roomId)` を再実行
+  - 復旧時は自動で `liveblocks 接続中` 表示へ戻る
+- 実装箇所:
+  - `src/lib/roomSyncStatus.ts`（同期状態ストア）
+  - `src/lib/liveblocksAdapter.ts`（状態更新）
+  - `src/pages/Room.tsx`（同期状態表示）
 
 ---
 

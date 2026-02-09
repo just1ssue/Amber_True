@@ -39,7 +39,10 @@
 - `npm run dev`
 
 ## Open items (next)
-1. Finalize production auth API contract and deployment path.
-2. Decide/implement error telemetry for auth and sync failures.
-3. Define reconnect and degraded-mode UX policy.
-4. Fix/confirm gitignore policy for `.env.local` if needed.
+- No critical open items. Next tasks can focus on operational hardening and monitoring refinement.
+
+## Recently fixed
+- 2026-02-09: `.env.local` gitignore policy fixed (`.env.example` can be committed).
+- 2026-02-09: Liveblocks production auth API contract and deployment path documented in `README.md`.
+- 2026-02-09: Auth/Sync failure telemetry implemented (`VITE_TELEMETRY_ENDPOINT`, adapter event reporting).
+- 2026-02-09: Reconnect/degraded-mode UX policy implemented (status banner + retry action in Room).

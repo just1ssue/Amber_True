@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { createInitialGameState } from "../lib/gameState";
 import { fetchPrompts } from "../lib/prompts";
+import { getRoomSyncStatus, subscribeRoomSyncStatus } from "../lib/roomSyncStatus";
 import { getRoomStateAdapter } from "../lib/stateAdapter";
 import type { GameState, PromptsJson } from "../lib/types";
 import { buildPrompt } from "../lib/prompt";
@@ -64,6 +65,7 @@ export function Room() {
   const [game, setGame] = useState<GameState | null>(null);
   const [joinError, setJoinError] = useState<string>("");
   const [debugRound, setDebugRound] = useState<number | null>(null);
+  const [syncStatus, setSyncStatus] = useState(() => getRoomSyncStatus(roomId));
 
   const [answerText, setAnswerText] = useState("");
 
@@ -139,6 +141,11 @@ export function Room() {
       });
     };
   }, [adapter, data, name, roomId, userId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    return subscribeRoomSyncStatus(roomId, setSyncStatus);
+  }, [roomId]);
 
   useEffect(() => {
     if (!game || debugRound === null) return;
@@ -321,6 +328,10 @@ export function Room() {
     }));
   }
 
+  function retrySync() {
+    adapter.load(roomId);
+  }
+
   return (
     <div className="room-layout">
       <aside className="card room-sidebar">
@@ -340,6 +351,22 @@ export function Room() {
           </div>
         </div>
         {joinError && <div className="muted section">{joinError}</div>}
+        {syncStatus.health === "degraded" && (
+          <div className="section">
+            <div className="muted">
+              同期状態: 劣化モード（{syncStatus.mode}）
+            </div>
+            <div className="muted">reason: {syncStatus.reason}</div>
+            <div style={{ marginTop: 8 }}>
+              <button className="btn btn--ghost" onClick={retrySync}>
+                再同期を試す
+              </button>
+            </div>
+          </div>
+        )}
+        {syncStatus.health === "healthy" && syncStatus.mode === "liveblocks" && (
+          <div className="muted section">同期状態: liveblocks 接続中</div>
+        )}
         {!isActiveRoundMember && (
           <div className="muted section">
             このラウンドは観戦モードです。次ラウンド開始時に参加対象へ入ります。
