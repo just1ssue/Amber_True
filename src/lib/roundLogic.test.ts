@@ -40,7 +40,7 @@ describe("round transitions", () => {
     expect(next.phase).toBe("VOTE");
   });
 
-  it("transitions VOTE -> RESULT and scores tied winners", () => {
+  it("transitions VOTE -> RESULT and penalizes lowest-voted answer", () => {
     const voteState: GameState = {
       ...toVoteState(createState()),
       votes: {
@@ -53,11 +53,11 @@ describe("round transitions", () => {
 
     const result = toResultState(voteState);
     expect(result.phase).toBe("RESULT");
-    expect(result.scores.u2).toBe(1);
-    expect(result.scores.u1).toBe(1);
+    expect(result.scores.u1).toBe(0);
+    expect(result.scores.u2).toBeUndefined();
   });
 
-  it("awards all top answers on tie", () => {
+  it("penalizes all lowest-voted answers on tie", () => {
     const voteState: GameState = {
       ...toVoteState(createState()),
       votes: {
@@ -69,8 +69,8 @@ describe("round transitions", () => {
     };
     const result = toResultState(voteState);
 
-    expect(result.scores.u1).toBe(1);
-    expect(result.scores.u2).toBe(1);
-    expect(result.scores.u3).toBe(1);
+    expect(result.scores.u1).toBe(-1);
+    expect(result.scores.u2).toBe(-1);
+    expect(result.scores.u3).toBe(-1);
   });
 });

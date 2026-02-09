@@ -242,7 +242,7 @@ export function Room() {
   if (promptsError) {
     return (
       <div className="card">
-        <div className="h1">Room: {roomId}</div>
+        <div className="h1">ルームID: {roomId}</div>
         <div className="muted">{promptsError}</div>
         <div style={{ marginTop: 8 }}>
           <button className="btn btn--secondary" onClick={() => void loadPrompts()}>
@@ -256,7 +256,7 @@ export function Room() {
   if (!game) {
     return (
       <div className="card">
-        <div className="h1">Room: {roomId}</div>
+        <div className="h1">ルームID: {roomId}</div>
         <div className="muted">{joinError || (isPromptsLoading ? "loading..." : "初期化中...")}</div>
       </div>
     );
@@ -283,6 +283,10 @@ export function Room() {
   const myVoted = Boolean(game.votes[userId]);
   const allSubmitted = areAllSubmitted(game, activeMemberIds);
   const allVoted = areAllVoted(game, activeMemberIds);
+  const submittedCount = activeMemberIds.filter((id) => Boolean(game.submissions[id])).length;
+  const votedCount = activeMemberIds.filter((id) => Boolean(game.votes[id])).length;
+  const phaseOrder: Array<GameState["phase"]> = ["ANSWER", "VOTE", "RESULT"];
+  const currentPhaseIndex = phaseOrder.indexOf(game.phase);
   const mySubmissionText = game.submissions[userId]?.text ?? "";
   const textCard = data?.text.find((x) => x.id === game.prompt.textId);
   const modifierCard = data?.modifier.find((x) => x.id === game.prompt.modifierId);
@@ -293,6 +297,27 @@ export function Room() {
     return Object.keys(game.submissions)
       .sort((a, b) => hashString(`${seed}:${a}`) - hashString(`${seed}:${b}`))
       .map((id) => [id, game.submissions[id]] as const);
+  })();
+  const voteCountBySubmitter = (() => {
+    const tally: Record<string, number> = {};
+    for (const submitterId of Object.keys(game.submissions)) tally[submitterId] = 0;
+    for (const vote of Object.values(game.votes)) {
+      if (tally[vote.targetUserId] === undefined) continue;
+      tally[vote.targetUserId] += 1;
+    }
+    return tally;
+  })();
+  const roundBottomIds = (() => {
+    const submitterIds = Object.keys(game.submissions);
+    if (submitterIds.length === 0) return [] as string[];
+    const minVotes = Math.min(...submitterIds.map((id) => voteCountBySubmitter[id] ?? 0));
+    return submitterIds.filter((id) => (voteCountBySubmitter[id] ?? 0) === minVotes);
+  })();
+  const overallScoreIds = Array.from(new Set([...Object.keys(game.members), ...Object.keys(game.scores)]));
+  const overallBottomIds = (() => {
+    if (overallScoreIds.length === 0) return [] as string[];
+    const minScore = Math.min(...overallScoreIds.map((id) => game.scores[id] ?? 0));
+    return overallScoreIds.filter((id) => (game.scores[id] ?? 0) === minScore);
   })();
 
   const getDisplayName = (id: string): string => {
@@ -428,19 +453,19 @@ export function Room() {
   return (
     <div className="room-layout">
       <aside className="card room-sidebar">
-        <div className="h1">Room: {roomId}</div>
+        <div className="h1">ルームID: {roomId}</div>
         <div className="meta-grid">
           <div className="meta-chip">
-            user: <code>{name}</code>
+            あなた: <code>{name}</code>
           </div>
           <div className="meta-chip">
-            room member: {memberIdsForView.length}
+            参加者: {memberIdsForView.length}
           </div>
           <div className="meta-chip">
-            round member: {activeMemberIds.length}
+            ラウンド対象: {activeMemberIds.length}
           </div>
           <div className="meta-chip">
-            host: <code>{game.hostId}</code>
+            ホスト: <code>{game.hostId}</code>
           </div>
         </div>
         {joinError && <div className="muted section">{joinError}</div>}
@@ -458,7 +483,7 @@ export function Room() {
           </div>
         )}
         {syncStatus.health === "healthy" && syncStatus.mode === "liveblocks" && (
-          <div className="muted section">同期状態: liveblocks 接続中</div>
+          <div className="muted section">同期状態: Liveblocks 接続中</div>
         )}
         {!isActiveRoundMember && (
           <div className="muted section">
@@ -475,7 +500,7 @@ export function Room() {
                     {userInitial(getDisplayName(id))}
                   </span>
                   <span className="member-name">{getDisplayName(id)}</span>
-                  {id === game.hostId && <span className="member-badge">host</span>}
+                  {id === game.hostId && <span className="member-badge">HOST</span>}
                 </div>
                 <div className="muted">
                   {activeMemberIds.includes(id) ? "参加中" : "観戦中"} / 提出:{" "}
@@ -500,6 +525,29 @@ export function Room() {
           <div className="phase-pill" data-phase={game.phase}>
             {game.phase}
           </div>
+        </div>
+        <div className="phase-track">
+          {phaseOrder.map((phase, index) => (
+            <div
+              key={phase}
+              className="phase-step"
+              data-state={
+                index < currentPhaseIndex ? "done" : index === currentPhaseIndex ? "active" : "todo"
+              }
+            >
+              <span className="phase-step__dot" />
+              <span>{phase}</span>
+            </div>
+          ))}
+        </div>
+        <div className="phase-stats muted">
+          {game.phase === "ANSWER" && (
+            <span>提出進捗: {submittedCount}/{activeMemberIds.length}（未提出 {activeMemberIds.length - submittedCount}）</span>
+          )}
+          {game.phase === "VOTE" && (
+            <span>ダサ投票進捗: {votedCount}/{activeMemberIds.length}（未投票 {activeMemberIds.length - votedCount}）</span>
+          )}
+          {game.phase === "RESULT" && <span>結果確認中: 次ラウンドの開始を待っています</span>}
         </div>
         <div className="card phase-card">
           <div className="muted">お題</div>
@@ -529,7 +577,7 @@ export function Room() {
                 </button>
               </div>
             )}
-            <div className="row" style={{ marginTop: 8 }}>
+            <div className="row action-row" style={{ marginTop: 8 }}>
               <input
                 className="input"
                 value={answerText}
@@ -538,14 +586,14 @@ export function Room() {
                 disabled={mySubmitted}
               />
               <button
-                className="btn btn--secondary"
+                className="btn btn--primary action-main"
                 disabled={mySubmitted || answerText.trim().length === 0 || !isActiveRoundMember}
                 onClick={submitAnswer}
               >
                 提出
               </button>
               <button
-                className="btn btn--primary"
+                className={`btn ${allSubmitted || isDebugRoundEnabled ? "btn--primary" : "btn--secondary"}`}
                 onClick={startVoteIfReady}
                 disabled={!isHost || (!allSubmitted && !isDebugRoundEnabled)}
               >
@@ -553,7 +601,7 @@ export function Room() {
               </button>
             </div>
             <div className="muted" style={{ marginTop: 8 }}>
-              {activeMemberIds.filter((id) => Boolean(game.submissions[id])).length}/{activeMemberIds.length} 人が提出済み
+              {submittedCount}/{activeMemberIds.length} 人が提出済み
             </div>
             {mySubmitted && (
               <div className="card phase-card" style={{ marginTop: 8 }}>
@@ -566,7 +614,7 @@ export function Room() {
 
         {game.phase === "VOTE" && (
           <div className="section">
-            <div className="muted">投票フェーズ：回答者は匿名表示（結果で公開）</div>
+            <div className="muted">投票フェーズ：この中で一番ダサい回答に投票（回答者は匿名）</div>
             <div className="list list--answers list--answers-vote" style={{ marginTop: 12 }}>
               {voteSubmissionEntries.length === 0 && <div className="muted">提出がありません</div>}
               {voteSubmissionEntries.map(([submitterId, submission]) => (
@@ -574,11 +622,11 @@ export function Room() {
                   <div className="muted">回答者: 匿名</div>
                   <div className="answer-card__text">{submission.text}</div>
                   <button
-                    className="btn btn--secondary"
+                    className="btn btn--secondary vote-button"
                     disabled={myVoted || !isActiveRoundMember}
                     onClick={() => castVote(submitterId)}
                   >
-                    これに投票
+                    ダサい！
                   </button>
                 </div>
               ))}
@@ -590,19 +638,28 @@ export function Room() {
               </button>
             </div>
             <div className="muted" style={{ marginTop: 8 }}>
-              {activeMemberIds.filter((id) => Boolean(game.votes[id])).length}/{activeMemberIds.length} 人が投票済み
+              {votedCount}/{activeMemberIds.length} 人が投票済み
             </div>
           </div>
         )}
 
         {game.phase === "RESULT" && (
           <div className="section">
-            <div className="muted">結果フェーズ：回答者を公開、同率は全員加点</div>
+            <div className="muted">結果フェーズ：最少得票の回答者に -1 点。</div>
 
             <div className="h2">回答一覧（公開）</div>
             <div className="list list--answers list--answers-result">
               {Object.entries(game.submissions).map(([submitterId, submission]) => (
-                <div className="card phase-card result-card" key={submitterId}>
+                <div
+                  className={[
+                    "card",
+                    "phase-card",
+                    "result-card",
+                    roundBottomIds.includes(submitterId) ? "result-card--round-bottom" : "",
+                    overallBottomIds.includes(submitterId) ? "result-card--overall-bottom" : "",
+                  ].join(" ").trim()}
+                  key={submitterId}
+                >
                   <div className="result-card__author-head">
                     <span
                       className="member-avatar member-avatar--sm"
@@ -611,22 +668,38 @@ export function Room() {
                     >
                       {userInitial(getDisplayName(submitterId))}
                     </span>
-                    <span className="muted">回答者: {getDisplayName(submitterId)}</span>
+                    <span className="muted result-card__author-name">回答者: {getDisplayName(submitterId)}</span>
+                    <span className="result-card__badge-row">
+                      {roundBottomIds.includes(submitterId) && (
+                        <span className="result-badge result-badge--round-bottom">ダサい</span>
+                      )}
+                      {overallBottomIds.includes(submitterId) && (
+                        <span className="result-badge result-badge--overall-bottom">一番ダサい</span>
+                      )}
+                    </span>
                   </div>
                   <div className="result-card__text">{submission.text}</div>
-                  <div className="muted result-card__score">score: {game.scores[submitterId] ?? 0}</div>
+                  <div className="muted result-card__score">
+                    このラウンドの得票: {voteCountBySubmitter[submitterId] ?? 0} / score: {game.scores[submitterId] ?? 0}
+                  </div>
                 </div>
               ))}
             </div>
 
             <div className="h2">スコア</div>
-            {Object.keys(game.scores).length === 0 ? (
+            {overallScoreIds.length === 0 ? (
               <div className="muted">まだ得点がありません</div>
             ) : (
               <ul className="score-list">
-                {Object.entries(game.scores).map(([uid, sc]) => (
-                  <li key={uid}>
-                    <code>{getDisplayName(uid)}</code>: {sc}
+                {overallScoreIds.map((uid) => (
+                  <li
+                    key={uid}
+                    className={overallBottomIds.includes(uid) ? "score-list__item score-list__item--bottom" : "score-list__item"}
+                  >
+                    <code>{getDisplayName(uid)}</code>: {game.scores[uid] ?? 0}
+                    {overallBottomIds.includes(uid) && (
+                      <span className="result-badge result-badge--overall-bottom">一番ダサい</span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -638,14 +711,6 @@ export function Room() {
           </div>
         )}
 
-        <div className="section">
-          <div className="h2">TODO（モック→本番）</div>
-          <ul className="muted">
-            <li>リアルタイム同期（Liveblocks等）に置き換え</li>
-            <li>参加者一覧/最大8人制限/全員提出→投票などの進行を実装</li>
-            <li>GitHub ActionsでSQLite→prompts.jsonの自動生成を運用</li>
-          </ul>
-        </div>
       </main>
     </div>
   );

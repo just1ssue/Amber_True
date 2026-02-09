@@ -97,91 +97,102 @@ export function Home() {
   }
 
   return (
-    <div className="card">
-      <div className="h1">Amber_True（モック）</div>
-      <div className="muted">非ログインで参加できるお題ゲーム。投票は匿名、結果で公開。同率は全員加点。</div>
-
-      <div className="section">
-        <div className="h2">表示名</div>
-        <input
-          className="input"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="表示名"
-        />
-        <div style={{ marginTop: 8 }}>
-          <button
-            className="btn btn--secondary"
-            onClick={() => setDisplayName(name.trim() || name)}
-          >
-            保存
-          </button>
+    <div className="home-layout">
+      <section className="card home-hero">
+        <div className="h1">Amber_True</div>
+        <div className="home-hero__lead">
+          ログイン不要で遊べるお題ゲーム。投票時は匿名、結果で公開。同率1位は全員加点。
         </div>
-      </div>
+        <div className="home-hero__chips">
+          <span className="meta-chip">最大 {MAX_MEMBERS} 人</span>
+          <span className="meta-chip">Hash Router</span>
+          <span className="meta-chip">Mock First</span>
+        </div>
+      </section>
 
-      <div className="section">
-        <div className="h2">ルーム作成</div>
-        {isPromptsLoading && <div className="muted">お題データを読み込み中です...</div>}
-        {promptsError && (
-          <div className="muted">
-            {promptsError}
-            <div style={{ marginTop: 8 }}>
-              <button className="btn btn--secondary" onClick={() => void loadPrompts()}>
-                再読み込み
-              </button>
-            </div>
+      <section className="card home-main">
+        <div className="home-block">
+          <div className="h2">表示名</div>
+          <div className="row">
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="表示名"
+            />
+            <button
+              className="btn btn--secondary"
+              onClick={() => setDisplayName(name.trim() || name)}
+            >
+              表示名を保存
+            </button>
           </div>
-        )}
-        <button
-          className="btn btn--primary"
-          disabled={isPromptsLoading || Boolean(promptsError)}
-          onClick={() => {
-            if (!prompts) {
-              setJoinNotice("お題データが未読込です。再読み込み後に作成してください。");
-              return;
-            }
-            const id = generateAvailableRoomId();
-            const initial = createInitialGameState(prompts, userId, name);
-            adapter.save(id, initial);
-            rememberRoomId(id);
-            nav(`/room/${id}`);
-          }}
-        >
-          新しいルームを作成
-        </button>
-      </div>
+        </div>
 
-      <div className="section">
-        <div className="h2">ルーム参加</div>
-        <div className="row">
-          <input
-            className="input"
-            value={roomId}
-            onChange={(e) => {
-              const next = e.target.value;
-              setRoomId(next);
-              const result = checkJoinable(next);
-              setJoinNotice(result.message);
-            }}
-            placeholder="ルームID"
-          />
+        <div className="home-block">
+          <div className="h2">ルーム作成</div>
+          {isPromptsLoading && <div className="muted">お題データを読み込み中です...</div>}
+          {promptsError && (
+            <div className="muted">
+              {promptsError}
+              <div style={{ marginTop: 8 }}>
+                <button className="btn btn--secondary" onClick={() => void loadPrompts()}>
+                  再読み込み
+                </button>
+              </div>
+            </div>
+          )}
           <button
-            className="btn btn--secondary"
-            disabled={!canJoin}
-            onClick={handleJoin}
+            className="btn btn--primary home-main-action"
+            disabled={isPromptsLoading || Boolean(promptsError)}
+            onClick={() => {
+              if (!prompts) {
+                setJoinNotice("お題データが未読込です。再読み込み後に作成してください。");
+                return;
+              }
+              const id = generateAvailableRoomId();
+              const initial = createInitialGameState(prompts, userId, name);
+              adapter.save(id, initial);
+              rememberRoomId(id);
+              nav(`/room/${id}`);
+            }}
           >
-            参加
+            新しいルームを作成
           </button>
         </div>
-        {joinNotice && <div className="muted" style={{ marginTop: 8 }}>{joinNotice}</div>}
-      </div>
 
-      <div className="section">
+        <div className="home-block">
+          <div className="h2">ルーム参加</div>
+          <div className="row">
+            <input
+              className="input"
+              value={roomId}
+              onChange={(e) => {
+                const next = e.target.value;
+                setRoomId(next);
+                const result = checkJoinable(next);
+                setJoinNotice(result.message);
+              }}
+              placeholder="ルームID"
+            />
+            <button
+              className="btn btn--secondary"
+              disabled={!canJoin}
+              onClick={handleJoin}
+            >
+              ルームへ参加
+            </button>
+          </div>
+          {joinNotice && <div className="muted" style={{ marginTop: 8 }}>{joinNotice}</div>}
+        </div>
+      </section>
+
+      <aside className="card home-side">
         <div className="h2">最近のルーム</div>
         {recentRoomIds.length === 0 ? (
           <div className="muted">履歴はまだありません</div>
         ) : (
-          <div className="row">
+          <div className="home-room-history">
             {recentRoomIds.map((id) => (
               <button
                 key={id}
@@ -197,14 +208,14 @@ export function Home() {
             ))}
           </div>
         )}
-      </div>
 
-      <div className="section">
-        <div className="h2">メモ</div>
-        <div className="muted">
-          GitHub Pages向けに Hash Router を使用しています。URLは <code>/#/room/&lt;roomId&gt;</code> 形式になります。
+        <div className="home-note">
+          <div className="h2">接続情報</div>
+          <div className="muted">
+            URLは <code>/#/room/&lt;roomId&gt;</code> 形式です。
+          </div>
         </div>
-      </div>
+      </aside>
     </div>
   );
 }

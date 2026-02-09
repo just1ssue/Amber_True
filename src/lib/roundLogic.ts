@@ -16,16 +16,28 @@ export function toVoteState(state: GameState): GameState {
 }
 
 export function toResultState(state: GameState): GameState {
+  const submittedIds = Object.keys(state.submissions);
+  if (submittedIds.length === 0) {
+    return {
+      ...state,
+      phase: "RESULT",
+    };
+  }
+
   const tally: Record<string, number> = {};
+  for (const submitterId of submittedIds) {
+    tally[submitterId] = 0;
+  }
   for (const v of Object.values(state.votes)) {
+    if (tally[v.targetUserId] === undefined) continue;
     tally[v.targetUserId] = (tally[v.targetUserId] ?? 0) + 1;
   }
-  const max = Math.max(0, ...Object.values(tally));
-  const winners = Object.entries(tally)
-    .filter(([, n]) => n === max && max > 0)
+  const min = Math.min(...Object.values(tally));
+  const losers = Object.entries(tally)
+    .filter(([, n]) => n === min)
     .map(([uid]) => uid);
   const nextScores = { ...state.scores };
-  for (const w of winners) nextScores[w] = (nextScores[w] ?? 0) + 1;
+  for (const loserId of losers) nextScores[loserId] = (nextScores[loserId] ?? 0) - 1;
   return {
     ...state,
     phase: "RESULT",
