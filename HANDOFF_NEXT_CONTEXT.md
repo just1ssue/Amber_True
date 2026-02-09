@@ -47,3 +47,6 @@
 - 2026-02-09: Auth/Sync failure telemetry implemented (`VITE_TELEMETRY_ENDPOINT`, adapter event reporting).
 - 2026-02-09: Reconnect/degraded-mode UX policy implemented (status banner + retry action in Room).
 - 2026-02-09: Host can kick room members to avoid ANSWER/VOTE deadlock when someone leaves unexpectedly.
+- 2026-02-09: Scoring rule changed to "fewest votes gets -1" (ties also -1), with RESULT badges for round/overall bottom.
+- 2026-02-09: Refresh-safe leave handling added using pending-leave grace to avoid unintended host transfer on reload.
+- 2026-02-09: Home/Room UI polish applied (phase track, progress stats, primary action emphasis, improved Home layout).
