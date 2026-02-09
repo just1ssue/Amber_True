@@ -13,7 +13,7 @@ export type PromptsJson = {
   content: PromptCard[];
 };
 
-export type Phase = "ANSWER" | "VOTE" | "RESULT";
+export type Phase = "ANSWER" | "VOTE" | "RESULT" | "FINAL_RESULT";
 
 export type Prompt = {
   textId: string;
@@ -39,6 +39,7 @@ export type Member = {
 export type GameState = {
   phase: Phase;
   round: number;
+  roundLimit: number;
   prompt: Prompt;
   activeMemberIds: string[];
   submissions: Record<string, Submission>;

@@ -7,6 +7,9 @@ import { getOrCreateDisplayName, getOrCreateUserId, setDisplayName } from "../li
 import type { PromptsJson } from "../lib/types";
 
 const MAX_MEMBERS = 8;
+const DEFAULT_ROUND_LIMIT = 5;
+const MIN_ROUND_LIMIT = 1;
+const MAX_ROUND_LIMIT = 30;
 const ROOM_ID_RETRY = 12;
 const RECENT_ROOM_IDS_KEY = "amber_true_recent_room_ids";
 const RECENT_ROOM_IDS_LIMIT = 5;
@@ -35,6 +38,7 @@ export function Home() {
   const [isPromptsLoading, setIsPromptsLoading] = useState(true);
   const [promptsError, setPromptsError] = useState("");
   const [joinNotice, setJoinNotice] = useState("");
+  const [roundLimitInput, setRoundLimitInput] = useState(String(DEFAULT_ROUND_LIMIT));
   const [recentRoomIds, setRecentRoomIds] = useState<string[]>(() => {
     const raw = localStorage.getItem(RECENT_ROOM_IDS_KEY);
     if (!raw) return [];
@@ -142,6 +146,17 @@ export function Home() {
               </div>
             </div>
           )}
+          <div className="row" style={{ marginBottom: 8 }}>
+            <input
+              className="input"
+              type="number"
+              min={MIN_ROUND_LIMIT}
+              max={MAX_ROUND_LIMIT}
+              value={roundLimitInput}
+              onChange={(e) => setRoundLimitInput(e.target.value)}
+              placeholder="ラウンド上限"
+            />
+          </div>
           <button
             className="btn btn--primary home-main-action"
             disabled={isPromptsLoading || Boolean(promptsError)}
@@ -150,8 +165,12 @@ export function Home() {
                 setJoinNotice("お題データが未読込です。再読み込み後に作成してください。");
                 return;
               }
+              const parsedRoundLimit = Number.parseInt(roundLimitInput, 10);
+              const roundLimit = Number.isFinite(parsedRoundLimit)
+                ? Math.min(MAX_ROUND_LIMIT, Math.max(MIN_ROUND_LIMIT, parsedRoundLimit))
+                : DEFAULT_ROUND_LIMIT;
               const id = generateAvailableRoomId();
-              const initial = createInitialGameState(prompts, userId, name);
+              const initial = createInitialGameState(prompts, userId, name, roundLimit);
               adapter.save(id, initial);
               rememberRoomId(id);
               nav(`/room/${id}`);
@@ -159,6 +178,9 @@ export function Home() {
           >
             新しいルームを作成
           </button>
+          <div className="muted" style={{ marginTop: 8 }}>
+            ラウンド上限: {MIN_ROUND_LIMIT} 〜 {MAX_ROUND_LIMIT}
+          </div>
         </div>
 
         <div className="home-block">

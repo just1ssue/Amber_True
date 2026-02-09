@@ -32,9 +32,9 @@ export function toResultState(state: GameState): GameState {
     if (tally[v.targetUserId] === undefined) continue;
     tally[v.targetUserId] = (tally[v.targetUserId] ?? 0) + 1;
   }
-  const min = Math.min(...Object.values(tally));
+  const max = Math.max(...Object.values(tally));
   const losers = Object.entries(tally)
-    .filter(([, n]) => n === min)
+    .filter(([, n]) => n === max)
     .map(([uid]) => uid);
   const nextScores = { ...state.scores };
   for (const loserId of losers) nextScores[loserId] = (nextScores[loserId] ?? 0) - 1;

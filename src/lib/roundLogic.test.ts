@@ -6,6 +6,7 @@ function createState(): GameState {
   return {
     phase: "ANSWER",
     round: 1,
+    roundLimit: 5,
     prompt: {
       textId: "t_001",
       modifierId: "m_001",
@@ -40,7 +41,7 @@ describe("round transitions", () => {
     expect(next.phase).toBe("VOTE");
   });
 
-  it("transitions VOTE -> RESULT and penalizes lowest-voted answer", () => {
+  it("transitions VOTE -> RESULT and penalizes highest-voted answer", () => {
     const voteState: GameState = {
       ...toVoteState(createState()),
       votes: {
@@ -53,11 +54,11 @@ describe("round transitions", () => {
 
     const result = toResultState(voteState);
     expect(result.phase).toBe("RESULT");
-    expect(result.scores.u1).toBe(0);
-    expect(result.scores.u2).toBeUndefined();
+    expect(result.scores.u1).toBe(1);
+    expect(result.scores.u2).toBe(-1);
   });
 
-  it("penalizes all lowest-voted answers on tie", () => {
+  it("penalizes all highest-voted answers on tie", () => {
     const voteState: GameState = {
       ...toVoteState(createState()),
       votes: {

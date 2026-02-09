@@ -5,11 +5,13 @@ export function createInitialGameState(
   data: PromptsJson,
   hostId: string,
   hostName: string,
+  roundLimit: number,
   now: number = Date.now(),
 ): GameState {
   return {
     phase: "ANSWER",
     round: 1,
+    roundLimit,
     prompt: buildPrompt(data),
     activeMemberIds: [hostId],
     submissions: {},

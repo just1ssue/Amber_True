@@ -6,7 +6,7 @@ import { getRoomSyncStatus, subscribeRoomSyncStatus } from "../lib/roomSyncStatu
 import { getRoomStateAdapter } from "../lib/stateAdapter";
 import type { GameState, PromptsJson } from "../lib/types";
 import { buildPrompt } from "../lib/prompt";
-import { getOrCreateDisplayName, getOrCreateUserId } from "../lib/storage";
+import { getOrCreateDisplayName, getOrCreateUserId, setDisplayName } from "../lib/storage";
 import { areAllSubmitted, areAllVoted, toResultState, toVoteState } from "../lib/roundLogic";
 import {
   buildDebugActiveMemberIds,
@@ -16,6 +16,9 @@ import {
 } from "../lib/debugTools";
 
 const MAX_MEMBERS = 8;
+const DEFAULT_ROUND_LIMIT = 5;
+const MIN_ROUND_LIMIT = 1;
+const MAX_ROUND_LIMIT = 30;
 const LEAVE_GRACE_MS = 1400;
 const LEAVE_SWEEP_MS = 1000;
 const PENDING_LEAVE_PREFIX = "amber_true_pending_leave:";
@@ -142,7 +145,7 @@ export function Room() {
   const { roomId = "" } = useParams();
   const adapter = useMemo(() => getRoomStateAdapter(), []);
   const userId = useMemo(() => getOrCreateUserId(), []);
-  const name = useMemo(() => getOrCreateDisplayName(), []);
+  const initialDisplayName = useMemo(() => getOrCreateDisplayName(), []);
 
   const [data, setData] = useState<PromptsJson | null>(null);
   const [isPromptsLoading, setIsPromptsLoading] = useState(true);
@@ -151,6 +154,11 @@ export function Room() {
   const [joinError, setJoinError] = useState<string>("");
   const [debugRound, setDebugRound] = useState<number | null>(null);
   const [syncStatus, setSyncStatus] = useState(() => getRoomSyncStatus(roomId));
+  const [displayNameInput, setDisplayNameInput] = useState(initialDisplayName);
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  const [displayNameNotice, setDisplayNameNotice] = useState("");
+  const [roundLimitInput, setRoundLimitInput] = useState(String(DEFAULT_ROUND_LIMIT));
+  const [roundLimitNotice, setRoundLimitNotice] = useState("");
 
   const [answerText, setAnswerText] = useState("");
 
@@ -188,7 +196,7 @@ export function Room() {
     const now = Date.now();
     const next = adapter.update(roomId, (prev) => {
       if (!prev) {
-        return createInitialGameState(data, userId, name, now);
+        return createInitialGameState(data, userId, initialDisplayName, DEFAULT_ROUND_LIMIT, now);
       }
       const isJoined = Boolean(prev.members[userId]);
       if (!isJoined && Object.keys(prev.members).length >= MAX_MEMBERS) {
@@ -205,11 +213,12 @@ export function Room() {
           : baseActiveMemberIds;
       return {
         ...prev,
+        roundLimit: prev.roundLimit ?? DEFAULT_ROUND_LIMIT,
         activeMemberIds,
         members: {
           ...prev.members,
           [userId]: {
-            name,
+            name: prev.members[userId]?.name ?? initialDisplayName,
             joinedAt: prev.members[userId]?.joinedAt ?? now,
           },
         },
@@ -225,12 +234,17 @@ export function Room() {
       unsub();
       markPendingLeave(roomId, userId, LEAVE_GRACE_MS);
     };
-  }, [adapter, data, name, roomId, userId]);
+  }, [adapter, data, initialDisplayName, roomId, userId]);
 
   useEffect(() => {
     if (!roomId) return;
     return subscribeRoomSyncStatus(roomId, setSyncStatus);
   }, [roomId]);
+
+  useEffect(() => {
+    if (!game) return;
+    setRoundLimitInput(String(game.roundLimit ?? DEFAULT_ROUND_LIMIT));
+  }, [game?.roundLimit]);
 
   useEffect(() => {
     if (!game || debugRound === null) return;
@@ -277,15 +291,18 @@ export function Room() {
     : memberIds;
   const isHost = game.hostId === userId;
   const isActiveRoundMember = activeMemberIds.includes(userId);
+  const effectiveRoundLimit = game.roundLimit ?? DEFAULT_ROUND_LIMIT;
+  const myDisplayName = game.members[userId]?.name ?? initialDisplayName;
   const canUseDebugButton = import.meta.env.DEV && isHost && game.phase === "ANSWER";
   const canRerollPrompt = import.meta.env.DEV && isHost && game.phase === "ANSWER" && Boolean(data);
+  const isLastRound = game.round >= effectiveRoundLimit;
   const mySubmitted = Boolean(game.submissions[userId]);
   const myVoted = Boolean(game.votes[userId]);
   const allSubmitted = areAllSubmitted(game, activeMemberIds);
   const allVoted = areAllVoted(game, activeMemberIds);
   const submittedCount = activeMemberIds.filter((id) => Boolean(game.submissions[id])).length;
   const votedCount = activeMemberIds.filter((id) => Boolean(game.votes[id])).length;
-  const phaseOrder: Array<GameState["phase"]> = ["ANSWER", "VOTE", "RESULT"];
+  const phaseOrder: Array<GameState["phase"]> = ["ANSWER", "VOTE", "RESULT", "FINAL_RESULT"];
   const currentPhaseIndex = phaseOrder.indexOf(game.phase);
   const mySubmissionText = game.submissions[userId]?.text ?? "";
   const textCard = data?.text.find((x) => x.id === game.prompt.textId);
@@ -310,14 +327,48 @@ export function Room() {
   const roundBottomIds = (() => {
     const submitterIds = Object.keys(game.submissions);
     if (submitterIds.length === 0) return [] as string[];
-    const minVotes = Math.min(...submitterIds.map((id) => voteCountBySubmitter[id] ?? 0));
-    return submitterIds.filter((id) => (voteCountBySubmitter[id] ?? 0) === minVotes);
+    const maxVotes = Math.max(...submitterIds.map((id) => voteCountBySubmitter[id] ?? 0));
+    return submitterIds.filter((id) => (voteCountBySubmitter[id] ?? 0) === maxVotes);
   })();
   const overallScoreIds = Array.from(new Set([...Object.keys(game.members), ...Object.keys(game.scores)]));
   const overallBottomIds = (() => {
     if (overallScoreIds.length === 0) return [] as string[];
     const minScore = Math.min(...overallScoreIds.map((id) => game.scores[id] ?? 0));
     return overallScoreIds.filter((id) => (game.scores[id] ?? 0) === minScore);
+  })();
+  const finalRankingRows = (() => {
+    const sortedIds = overallScoreIds
+      .slice()
+      .sort((a, b) => (game.scores[a] ?? 0) - (game.scores[b] ?? 0));
+    const rows: Array<{ userId: string; rank: number; isTied: boolean }> = [];
+    let lastScore: number | null = null;
+    let lastRank = 0;
+    let tiedGroupSize = 0;
+    for (let i = 0; i < sortedIds.length; i += 1) {
+      const userId = sortedIds[i];
+      const score = game.scores[userId] ?? 0;
+      if (lastScore !== null && score === lastScore) {
+        rows.push({ userId, rank: lastRank, isTied: true });
+        tiedGroupSize += 1;
+      } else {
+        if (tiedGroupSize > 1) {
+          for (let j = rows.length - tiedGroupSize; j < rows.length; j += 1) {
+            rows[j] = { ...rows[j], isTied: true };
+          }
+        }
+        const rank = i + 1;
+        rows.push({ userId, rank, isTied: false });
+        lastScore = score;
+        lastRank = rank;
+        tiedGroupSize = 1;
+      }
+    }
+    if (tiedGroupSize > 1) {
+      for (let j = rows.length - tiedGroupSize; j < rows.length; j += 1) {
+        rows[j] = { ...rows[j], isTied: true };
+      }
+    }
+    return rows;
   })();
 
   const getDisplayName = (id: string): string => {
@@ -392,15 +443,24 @@ export function Room() {
 
   function nextRound() {
     if (!isHost || !data) return;
-    applyGameUpdate((prev) => ({
-      ...prev,
-      round: prev.round + 1,
-      phase: "ANSWER",
-      prompt: buildPrompt(data),
-      activeMemberIds: Object.keys(prev.members),
-      submissions: {},
-      votes: {},
-    }));
+    applyGameUpdate((prev) => {
+      const roundLimit = prev.roundLimit ?? DEFAULT_ROUND_LIMIT;
+      if (prev.round >= roundLimit) {
+        return {
+          ...prev,
+          phase: "FINAL_RESULT",
+        };
+      }
+      return {
+        ...prev,
+        round: prev.round + 1,
+        phase: "ANSWER",
+        prompt: buildPrompt(data),
+        activeMemberIds: Object.keys(prev.members),
+        submissions: {},
+        votes: {},
+      };
+    });
   }
 
   function castVote(targetUserId: string) {
@@ -450,13 +510,113 @@ export function Room() {
     kickMember(adapter, roomId, userId, targetUserId);
   }
 
+  function updateDisplayName() {
+    const nextName = displayNameInput.trim();
+    if (!nextName) {
+      setDisplayNameNotice("表示名を入力してください。");
+      return;
+    }
+    setDisplayName(nextName);
+    applyGameUpdate((prev) => {
+      const current = prev.members[userId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        members: {
+          ...prev.members,
+          [userId]: {
+            ...current,
+            name: nextName,
+          },
+        },
+      };
+    });
+    setDisplayNameInput(nextName);
+    setDisplayNameNotice("表示名を更新しました。");
+    setIsEditingDisplayName(false);
+  }
+
+  function updateRoundLimit() {
+    if (!isHost) return;
+    const parsed = Number.parseInt(roundLimitInput, 10);
+    if (!Number.isFinite(parsed)) {
+      setRoundLimitNotice("ラウンド上限は数値で入力してください。");
+      return;
+    }
+    const currentRound = game?.round ?? 1;
+    const minAllowed = game?.phase === "FINAL_RESULT" ? MIN_ROUND_LIMIT : currentRound;
+    const clamped = Math.min(MAX_ROUND_LIMIT, Math.max(minAllowed, parsed));
+    if (clamped !== parsed) {
+      setRoundLimitNotice(`現在は ${minAllowed} 〜 ${MAX_ROUND_LIMIT} の範囲で設定できます。`);
+    } else {
+      setRoundLimitNotice("ラウンド上限を更新しました。");
+    }
+    applyGameUpdate((prev) => ({
+      ...prev,
+      roundLimit: clamped,
+    }));
+    setRoundLimitInput(String(clamped));
+  }
+
+  function restartFromRoundOne() {
+    if (!isHost || !data) return;
+    setDebugRound(null);
+    applyGameUpdate((prev) => {
+      const cleanedMembers = Object.fromEntries(
+        Object.entries(prev.members).filter(([id]) => !isDebugMemberId(id)),
+      );
+      const nextHostId = cleanedMembers[prev.hostId] ? prev.hostId : Object.keys(cleanedMembers)[0] ?? prev.hostId;
+      return {
+        ...prev,
+        phase: "ANSWER",
+        round: 1,
+        prompt: buildPrompt(data),
+        members: cleanedMembers,
+        hostId: nextHostId,
+        activeMemberIds: Object.keys(cleanedMembers),
+        submissions: {},
+        votes: {},
+        scores: {},
+      };
+    });
+  }
+
   return (
     <div className="room-layout">
       <aside className="card room-sidebar">
         <div className="h1">ルームID: {roomId}</div>
         <div className="meta-grid">
           <div className="meta-chip">
-            あなた: <code>{name}</code>
+            あなた: <code>{myDisplayName}</code>
+          </div>
+          <div className="room-name-editor">
+            <button
+              className="btn btn--secondary room-name-editor__trigger"
+              onClick={() => {
+                setDisplayNameInput(myDisplayName);
+                setDisplayNameNotice("");
+                setIsEditingDisplayName(true);
+              }}
+            >
+              名前を変更
+            </button>
+            {isEditingDisplayName && (
+              <div className="row room-name-editor__form">
+                <input
+                  className="input"
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  placeholder="表示名"
+                />
+                <button className="btn btn--primary" onClick={updateDisplayName}>
+                  保存
+                </button>
+                <button className="btn btn--ghost" onClick={() => setIsEditingDisplayName(false)}>
+                  キャンセル
+                </button>
+              </div>
+            )}
+            {displayNameNotice && <div className="muted room-name-editor__notice">{displayNameNotice}</div>}
           </div>
           <div className="meta-chip">
             参加者: {memberIdsForView.length}
@@ -466,6 +626,9 @@ export function Room() {
           </div>
           <div className="meta-chip">
             ホスト: <code>{game.hostId}</code>
+          </div>
+          <div className="meta-chip">
+            ラウンド: {game.round}/{effectiveRoundLimit}
           </div>
         </div>
         {joinError && <div className="muted section">{joinError}</div>}
@@ -517,6 +680,30 @@ export function Room() {
             ))}
           </div>
         </div>
+        <div className="section room-sidebar__footer">
+          <div className="h2">ラウンド上限</div>
+          {isHost ? (
+            <>
+              <div className="row">
+                <input
+                  className="input"
+                  type="number"
+                  min={game.phase === "FINAL_RESULT" ? MIN_ROUND_LIMIT : game.round}
+                  max={MAX_ROUND_LIMIT}
+                  value={roundLimitInput}
+                  onChange={(e) => setRoundLimitInput(e.target.value)}
+                  placeholder="ラウンド上限"
+                />
+                <button className="btn btn--secondary" onClick={updateRoundLimit}>
+                  変更
+                </button>
+              </div>
+              {roundLimitNotice && <div className="muted" style={{ marginTop: 8 }}>{roundLimitNotice}</div>}
+            </>
+          ) : (
+            <div className="muted">ホスト設定: {effectiveRoundLimit} ラウンド</div>
+          )}
+        </div>
       </aside>
 
       <main className="card room-main">
@@ -548,6 +735,7 @@ export function Room() {
             <span>ダサ投票進捗: {votedCount}/{activeMemberIds.length}（未投票 {activeMemberIds.length - votedCount}）</span>
           )}
           {game.phase === "RESULT" && <span>結果確認中: 次ラウンドの開始を待っています</span>}
+          {game.phase === "FINAL_RESULT" && <span>総合リザルト: 次のゲームを開始できます</span>}
         </div>
         <div className="card phase-card">
           <div className="muted">お題</div>
@@ -706,8 +894,56 @@ export function Room() {
             )}
 
             <button className="btn btn--primary" onClick={nextRound} disabled={!isHost}>
-              次のラウンド
+              {isLastRound ? "総合リザルトへ" : "次のラウンド"}
             </button>
+          </div>
+        )}
+
+        {game.phase === "FINAL_RESULT" && (
+          <div className="section">
+            <div className="muted">総合リザルト：全ラウンド終了。</div>
+            <div className="h2">最終順位（ダサい順）</div>
+            {overallScoreIds.length === 0 ? (
+              <div className="muted">まだ得点がありません</div>
+            ) : (
+              <div className="list list--answers list--answers-result">
+                {finalRankingRows.map(({ userId, rank, isTied }) => (
+                    <div
+                      className={[
+                        "card",
+                        "phase-card",
+                        "result-card",
+                        overallBottomIds.includes(userId) ? "result-card--overall-bottom" : "",
+                      ].join(" ").trim()}
+                      key={userId}
+                    >
+                      <div className="result-card__author-head">
+                        <span
+                          className="member-avatar member-avatar--sm"
+                          style={avatarStyle(userId)}
+                          aria-hidden="true"
+                        >
+                          {userInitial(getDisplayName(userId))}
+                        </span>
+                        <span className="muted result-card__author-name">
+                          {isTied ? `${rank}位タイ` : `${rank}位`}: {getDisplayName(userId)}
+                        </span>
+                        <span className="result-card__badge-row">
+                          {overallBottomIds.includes(userId) && (
+                            <span className="result-badge result-badge--overall-bottom">一番ダサい！</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="muted result-card__score">score: {game.scores[userId] ?? 0}</div>
+                    </div>
+                  ))}
+              </div>
+            )}
+            <div className="row" style={{ marginTop: 12 }}>
+              <button className="btn btn--primary" onClick={restartFromRoundOne} disabled={!isHost}>
+                次の部屋へ
+              </button>
+            </div>
           </div>
         )}
 
