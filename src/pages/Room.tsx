@@ -53,6 +53,26 @@ function hashString(input: string): number {
   return h >>> 0;
 }
 
+function leaveRoom(adapter: ReturnType<typeof getRoomStateAdapter>, roomId: string, userId: string) {
+  adapter.update(roomId, (prev) => {
+    if (!prev || !prev.members[userId]) return prev;
+    const members = { ...prev.members };
+    delete members[userId];
+    const nextMemberIds = Object.keys(members);
+    if (nextMemberIds.length === 0) return null;
+    const nextActiveMemberIds = prev.activeMemberIds.filter((id) => id !== userId);
+    const activeMemberIds =
+      nextActiveMemberIds.length > 0 ? nextActiveMemberIds : nextMemberIds;
+    const nextHostId = prev.hostId === userId ? nextMemberIds[0] : prev.hostId;
+    return {
+      ...prev,
+      activeMemberIds,
+      members,
+      hostId: nextHostId,
+    };
+  });
+}
+
 export function Room() {
   const { roomId = "" } = useParams();
   const adapter = useMemo(() => getRoomStateAdapter(), []);
@@ -90,6 +110,9 @@ export function Room() {
   useEffect(() => {
     if (!data || !roomId) return;
     const unsub = adapter.subscribe(roomId, setGame);
+    const handlePageLeave = () => leaveRoom(adapter, roomId, userId);
+    window.addEventListener("pagehide", handlePageLeave);
+    window.addEventListener("beforeunload", handlePageLeave);
     let isFull = false;
     const now = Date.now();
     const next = adapter.update(roomId, (prev) => {
@@ -101,10 +124,14 @@ export function Room() {
         isFull = true;
         return prev;
       }
-      const activeMemberIds =
+      const baseActiveMemberIds =
         prev.activeMemberIds && prev.activeMemberIds.length > 0
-          ? prev.activeMemberIds
+          ? prev.activeMemberIds.filter((id) => Boolean(prev.members[id]))
           : Object.keys(prev.members);
+      const activeMemberIds =
+        prev.phase === "ANSWER" && !baseActiveMemberIds.includes(userId)
+          ? [...baseActiveMemberIds, userId]
+          : baseActiveMemberIds;
       return {
         ...prev,
         activeMemberIds,
@@ -121,24 +148,10 @@ export function Room() {
     setJoinError(isFull ? "このルームは満員です（最大8人）。" : "");
 
     return () => {
+      window.removeEventListener("pagehide", handlePageLeave);
+      window.removeEventListener("beforeunload", handlePageLeave);
       unsub();
-      adapter.update(roomId, (prev) => {
-        if (!prev || !prev.members[userId]) return prev;
-        const members = { ...prev.members };
-        delete members[userId];
-        const nextMemberIds = Object.keys(members);
-        if (nextMemberIds.length === 0) return null;
-        const nextActiveMemberIds = prev.activeMemberIds.filter((id) => id !== userId);
-        const activeMemberIds =
-          nextActiveMemberIds.length > 0 ? nextActiveMemberIds : nextMemberIds;
-        const nextHostId = prev.hostId === userId ? nextMemberIds[0] : prev.hostId;
-        return {
-          ...prev,
-          activeMemberIds,
-          members,
-          hostId: nextHostId,
-        };
-      });
+      leaveRoom(adapter, roomId, userId);
     };
   }, [adapter, data, name, roomId, userId]);
 

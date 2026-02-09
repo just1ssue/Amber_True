@@ -28,7 +28,7 @@
 - `stateAdapter`（localStorage）経由で状態更新を集約
 - 同一PC別タブでルーム状態同期（`storage`イベント）
 - 退出時のメンバー除外、host離脱時の移譲
-- `activeMemberIds` によるラウンド参加対象固定（途中参加は次ラウンドから）
+- `activeMemberIds` によるラウンド参加対象管理（ANSWER中の途中参加は当該ラウンドから参加可、VOTE/RESULT中は次ラウンドから）
 - 観戦モード表示（対象外メンバーは提出/投票不可）
 - 参加者一覧で提出/投票ステータスを表示
 - Home/Roomで prompts 読み込み失敗時の再読み込みUI
