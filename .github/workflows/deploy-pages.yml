@@ -19,7 +19,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      VITE_ROOM_ADAPTER: liveblocks
       VITE_LIVEBLOCKS_AUTH_ENDPOINT: ${{ secrets.VITE_LIVEBLOCKS_AUTH_ENDPOINT }}
       VITE_LIVEBLOCKS_PUBLIC_KEY: ${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}
       VITE_TELEMETRY_ENDPOINT: ${{ secrets.VITE_TELEMETRY_ENDPOINT }}
@@ -42,12 +41,15 @@ jobs:
       - name: Sync prompts JSON
         run: npm run prompts:sync
 
-      - name: Validate Liveblocks build config
+      - name: Resolve adapter mode
         shell: bash
         run: |
-          if [ -z "$VITE_LIVEBLOCKS_AUTH_ENDPOINT" ] && [ -z "$VITE_LIVEBLOCKS_PUBLIC_KEY" ]; then
-            echo "Missing Liveblocks config. Set VITE_LIVEBLOCKS_AUTH_ENDPOINT (recommended) or VITE_LIVEBLOCKS_PUBLIC_KEY in repository secrets."
-            exit 1
+          if [ -n "$VITE_LIVEBLOCKS_AUTH_ENDPOINT" ] || [ -n "$VITE_LIVEBLOCKS_PUBLIC_KEY" ]; then
+            echo "VITE_ROOM_ADAPTER=liveblocks" >> "$GITHUB_ENV"
+            echo "Using liveblocks adapter for this deploy."
+          else
+            echo "VITE_ROOM_ADAPTER=local" >> "$GITHUB_ENV"
+            echo "Liveblocks config is missing. Falling back to local adapter for this deploy."
           fi
 
       - name: Build
