@@ -16,6 +16,9 @@ import {
 } from "../lib/debugTools";
 
 const MAX_MEMBERS = 8;
+const LEAVE_GRACE_MS = 1400;
+const LEAVE_SWEEP_MS = 1000;
+const PENDING_LEAVE_PREFIX = "amber_true_pending_leave:";
 
 function userInitial(name: string): string {
   const normalized = name.trim();
@@ -53,23 +56,85 @@ function hashString(input: string): number {
   return h >>> 0;
 }
 
+function removeMemberFromState(prev: GameState, memberId: string): GameState | null {
+  if (!prev.members[memberId]) return prev;
+  const members = { ...prev.members };
+  delete members[memberId];
+  const nextMemberIds = Object.keys(members);
+  if (nextMemberIds.length === 0) return null;
+  const nextActiveMemberIds = prev.activeMemberIds
+    .filter((id) => id !== memberId && Boolean(members[id]));
+  const activeMemberIds =
+    nextActiveMemberIds.length > 0 ? nextActiveMemberIds : nextMemberIds;
+  const nextHostId = prev.hostId === memberId ? nextMemberIds[0] : prev.hostId;
+  return {
+    ...prev,
+    activeMemberIds,
+    members,
+    hostId: nextHostId,
+  };
+}
+
 function leaveRoom(adapter: ReturnType<typeof getRoomStateAdapter>, roomId: string, userId: string) {
   adapter.update(roomId, (prev) => {
-    if (!prev || !prev.members[userId]) return prev;
-    const members = { ...prev.members };
-    delete members[userId];
-    const nextMemberIds = Object.keys(members);
-    if (nextMemberIds.length === 0) return null;
-    const nextActiveMemberIds = prev.activeMemberIds.filter((id) => id !== userId);
-    const activeMemberIds =
-      nextActiveMemberIds.length > 0 ? nextActiveMemberIds : nextMemberIds;
-    const nextHostId = prev.hostId === userId ? nextMemberIds[0] : prev.hostId;
-    return {
-      ...prev,
-      activeMemberIds,
-      members,
-      hostId: nextHostId,
-    };
+    if (!prev) return prev;
+    return removeMemberFromState(prev, userId);
+  });
+}
+
+function pendingLeaveKey(roomId: string, userId: string): string {
+  return `${PENDING_LEAVE_PREFIX}${roomId}:${userId}`;
+}
+
+function markPendingLeave(roomId: string, userId: string, delayMs: number) {
+  const dueAt = Date.now() + delayMs;
+  localStorage.setItem(pendingLeaveKey(roomId, userId), JSON.stringify({ dueAt }));
+}
+
+function clearPendingLeave(roomId: string, userId: string) {
+  localStorage.removeItem(pendingLeaveKey(roomId, userId));
+}
+
+function sweepPendingLeaves(
+  adapter: ReturnType<typeof getRoomStateAdapter>,
+  roomId: string,
+  now: number = Date.now(),
+) {
+  const roomPrefix = `${PENDING_LEAVE_PREFIX}${roomId}:`;
+  for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(roomPrefix)) continue;
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      localStorage.removeItem(key);
+      continue;
+    }
+    let dueAt = 0;
+    try {
+      const parsed = JSON.parse(raw) as { dueAt?: number };
+      dueAt = typeof parsed.dueAt === "number" ? parsed.dueAt : 0;
+    } catch {
+      localStorage.removeItem(key);
+      continue;
+    }
+    if (dueAt > now) continue;
+    const targetUserId = key.slice(roomPrefix.length);
+    localStorage.removeItem(key);
+    leaveRoom(adapter, roomId, targetUserId);
+  }
+}
+
+function kickMember(
+  adapter: ReturnType<typeof getRoomStateAdapter>,
+  roomId: string,
+  hostId: string,
+  targetUserId: string,
+) {
+  adapter.update(roomId, (prev) => {
+    if (!prev) return prev;
+    if (prev.hostId !== hostId) return prev;
+    if (hostId === targetUserId) return prev;
+    return removeMemberFromState(prev, targetUserId);
   });
 }
 
@@ -109,10 +174,16 @@ export function Room() {
 
   useEffect(() => {
     if (!data || !roomId) return;
+    clearPendingLeave(roomId, userId);
+    sweepPendingLeaves(adapter, roomId);
     const unsub = adapter.subscribe(roomId, setGame);
-    const handlePageLeave = () => leaveRoom(adapter, roomId, userId);
+    const handlePageLeave = () => markPendingLeave(roomId, userId, LEAVE_GRACE_MS);
     window.addEventListener("pagehide", handlePageLeave);
     window.addEventListener("beforeunload", handlePageLeave);
+    const sweepTimer = window.setInterval(() => {
+      clearPendingLeave(roomId, userId);
+      sweepPendingLeaves(adapter, roomId);
+    }, LEAVE_SWEEP_MS);
     let isFull = false;
     const now = Date.now();
     const next = adapter.update(roomId, (prev) => {
@@ -150,8 +221,9 @@ export function Room() {
     return () => {
       window.removeEventListener("pagehide", handlePageLeave);
       window.removeEventListener("beforeunload", handlePageLeave);
+      window.clearInterval(sweepTimer);
       unsub();
-      leaveRoom(adapter, roomId, userId);
+      markPendingLeave(roomId, userId, LEAVE_GRACE_MS);
     };
   }, [adapter, data, name, roomId, userId]);
 
@@ -345,6 +417,14 @@ export function Room() {
     adapter.load(roomId);
   }
 
+  function handleKick(targetUserId: string) {
+    if (!game) return;
+    if (!isHost || targetUserId === userId || !game.members[targetUserId]) return;
+    const targetName = game.members[targetUserId].name;
+    if (!window.confirm(`${targetName} をルームから退出させますか？`)) return;
+    kickMember(adapter, roomId, userId, targetUserId);
+  }
+
   return (
     <div className="room-layout">
       <aside className="card room-sidebar">
@@ -401,6 +481,13 @@ export function Room() {
                   {activeMemberIds.includes(id) ? "参加中" : "観戦中"} / 提出:{" "}
                   {game.submissions[id] ? "済" : "-"} / 投票: {game.votes[id] ? "済" : "-"}
                 </div>
+                {isHost && id !== userId && Boolean(game.members[id]) && (
+                  <div style={{ marginTop: 8 }}>
+                    <button className="btn btn--ghost" onClick={() => handleKick(id)}>
+                      退出させる
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

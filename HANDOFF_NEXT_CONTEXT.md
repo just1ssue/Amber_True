@@ -46,3 +46,4 @@
 - 2026-02-09: Liveblocks production auth API contract and deployment path documented in `README.md`.
 - 2026-02-09: Auth/Sync failure telemetry implemented (`VITE_TELEMETRY_ENDPOINT`, adapter event reporting).
 - 2026-02-09: Reconnect/degraded-mode UX policy implemented (status banner + retry action in Room).
+- 2026-02-09: Host can kick room members to avoid ANSWER/VOTE deadlock when someone leaves unexpectedly.
