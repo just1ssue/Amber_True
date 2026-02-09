@@ -18,6 +18,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_ROOM_ADAPTER: liveblocks
+      VITE_LIVEBLOCKS_AUTH_ENDPOINT: ${{ secrets.VITE_LIVEBLOCKS_AUTH_ENDPOINT }}
+      VITE_LIVEBLOCKS_PUBLIC_KEY: ${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}
+      VITE_TELEMETRY_ENDPOINT: ${{ secrets.VITE_TELEMETRY_ENDPOINT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +41,14 @@ jobs:
 
       - name: Sync prompts JSON
         run: npm run prompts:sync
+
+      - name: Validate Liveblocks build config
+        shell: bash
+        run: |
+          if [ -z "$VITE_LIVEBLOCKS_AUTH_ENDPOINT" ] && [ -z "$VITE_LIVEBLOCKS_PUBLIC_KEY" ]; then
+            echo "Missing Liveblocks config. Set VITE_LIVEBLOCKS_AUTH_ENDPOINT (recommended) or VITE_LIVEBLOCKS_PUBLIC_KEY in repository secrets."
+            exit 1
+          fi
 
       - name: Build
         run: npm run build
