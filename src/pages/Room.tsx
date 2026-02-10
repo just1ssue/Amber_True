@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { createInitialGameState } from "../lib/gameState";
 import { fetchPrompts } from "../lib/prompts";
@@ -6,8 +6,17 @@ import { getRoomSyncStatus, subscribeRoomSyncStatus } from "../lib/roomSyncStatu
 import { getRoomStateAdapter } from "../lib/stateAdapter";
 import type { GameState, PromptsJson } from "../lib/types";
 import { buildPrompt } from "../lib/prompt";
-import { getOrCreateDisplayName, getOrCreateUserId, setDisplayName } from "../lib/storage";
+import {
+  getOrCreateDisplayName,
+  getOrCreateUserId,
+  getSeEnabled,
+  getSeVolume,
+  setDisplayName,
+  setSeEnabled,
+  setSeVolume,
+} from "../lib/storage";
 import { areAllSubmitted, areAllVoted, toResultState, toVoteState } from "../lib/roundLogic";
+import { playSe } from "../lib/seManager";
 import {
   buildDebugActiveMemberIds,
   debugMemberName,
@@ -159,8 +168,11 @@ export function Room() {
   const [displayNameNotice, setDisplayNameNotice] = useState("");
   const [roundLimitInput, setRoundLimitInput] = useState(String(DEFAULT_ROUND_LIMIT));
   const [roundLimitNotice, setRoundLimitNotice] = useState("");
+  const [seEnabled, setSeEnabledState] = useState(() => getSeEnabled());
+  const [seVolume, setSeVolumeState] = useState(() => getSeVolume());
 
   const [answerText, setAnswerText] = useState("");
+  const prevPhaseRef = useRef<GameState["phase"] | null>(null);
 
   async function loadPrompts() {
     setIsPromptsLoading(true);
@@ -252,6 +264,21 @@ export function Room() {
       setDebugRound(null);
     }
   }, [debugRound, game]);
+
+  useEffect(() => {
+    if (!game) return;
+    if (!prevPhaseRef.current) {
+      prevPhaseRef.current = game.phase;
+      return;
+    }
+    if (prevPhaseRef.current === game.phase) return;
+    if (game.phase === "RESULT" || game.phase === "FINAL_RESULT") {
+      playSe("result");
+    } else {
+      playSe("phase");
+    }
+    prevPhaseRef.current = game.phase;
+  }, [game]);
 
   if (promptsError) {
     return (
@@ -398,6 +425,7 @@ export function Room() {
         },
       },
     }));
+    playSe("submit");
     setAnswerText("");
   }
 
@@ -483,6 +511,7 @@ export function Room() {
         votes,
       };
     });
+    playSe("vote");
   }
 
   function activateDebugRound() {
@@ -496,10 +525,26 @@ export function Room() {
       ...prev,
       prompt: buildPrompt(data),
     }));
+    playSe("phase");
   }
 
   function retrySync() {
     adapter.load(roomId);
+  }
+
+  function toggleSeEnabled() {
+    const next = !seEnabled;
+    setSeEnabled(next);
+    setSeEnabledState(next);
+    if (next) playSe("phase");
+  }
+
+  function updateSeVolume(nextValue: string) {
+    const parsed = Number.parseFloat(nextValue);
+    const nextVolume = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0.65;
+    setSeVolume(nextVolume);
+    setSeVolumeState(nextVolume);
+    if (seEnabled) playSe("submit");
   }
 
   function handleKick(targetUserId: string) {
@@ -514,6 +559,7 @@ export function Room() {
     const nextName = displayNameInput.trim();
     if (!nextName) {
       setDisplayNameNotice("表示名を入力してください。");
+      playSe("error");
       return;
     }
     setDisplayName(nextName);
@@ -534,6 +580,7 @@ export function Room() {
     setDisplayNameInput(nextName);
     setDisplayNameNotice("表示名を更新しました。");
     setIsEditingDisplayName(false);
+    playSe("submit");
   }
 
   function updateRoundLimit() {
@@ -541,6 +588,7 @@ export function Room() {
     const parsed = Number.parseInt(roundLimitInput, 10);
     if (!Number.isFinite(parsed)) {
       setRoundLimitNotice("ラウンド上限は数値で入力してください。");
+      playSe("error");
       return;
     }
     const currentRound = game?.round ?? 1;
@@ -556,6 +604,7 @@ export function Room() {
       roundLimit: clamped,
     }));
     setRoundLimitInput(String(clamped));
+    playSe("submit");
   }
 
   function restartFromRoundOne() {
@@ -703,6 +752,27 @@ export function Room() {
           ) : (
             <div className="muted">ホスト設定: {effectiveRoundLimit} ラウンド</div>
           )}
+        </div>
+        <div className="section room-sidebar__footer">
+          <div className="h2">SE設定</div>
+          <div className="row">
+            <button className={`btn ${seEnabled ? "btn--primary" : "btn--secondary"}`} onClick={toggleSeEnabled}>
+              {seEnabled ? "SE: ON" : "SE: OFF"}
+            </button>
+          </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <input
+              className="input"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={seVolume}
+              onChange={(e) => updateSeVolume(e.target.value)}
+              disabled={!seEnabled}
+            />
+            <span className="muted">{Math.round(seVolume * 100)}%</span>
+          </div>
         </div>
       </aside>
 

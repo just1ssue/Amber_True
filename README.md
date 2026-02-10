@@ -35,6 +35,8 @@
 - 参加者一覧で提出/投票ステータスを表示
 - VOTEで「イケてない回答」投票UI、RESULTで「ラウンドビリ/総合ビリ」バッジ表示
 - Home/Roomで prompts 読み込み失敗時の再読み込みUI
+- RoomのSE設定（ON/OFF、音量スライダー）とローカル保存
+- フェーズ遷移/提出/投票/入力エラー時のSE再生（音源未配置時は無音）
 - UTF-8固定（`.editorconfig`）
 - dev専用デバッグ機能（Room）
   - 8人参加を仮想化して回答を補完
@@ -243,6 +245,7 @@ CSV反映手順:
 - `.github/workflows/` … SQLite→JSON同期（手動実行）
 - `data/prompts.db` … お題のローカルDB
 - `public/prompts.json` … 生成されたお題JSON（静的配布）
+- `public/assets/se/` … 効果音アセット配置先
 - `src/pages/Home.tsx` … ルーム作成/参加
 - `src/pages/Room.tsx` … ルーム（ゲーム画面の雛形）
 - `src/lib/types.ts` … 型定義（`GameState`含む）
@@ -251,6 +254,7 @@ CSV反映手順:
 - `src/lib/gameState.ts` … 初期ゲーム状態生成
 - `src/lib/storage.ts` … userId/displayNameの永続化
 - `src/lib/debugTools.ts` … dev用デバッグ参加者ロジック
+- `src/lib/seManager.ts` … SE再生管理
 
 ---
 

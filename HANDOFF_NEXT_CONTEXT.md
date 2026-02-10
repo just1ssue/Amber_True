@@ -29,6 +29,7 @@
 - `src/lib/stateAdapter.ts` : adapter selector
 - `src/lib/roomStateAdapterTypes.ts` : adapter contract
 - `src/lib/debugTools.ts` : debug helpers
+- `src/lib/seManager.ts` : sound effect playback manager
 - `src/lib/roundLogic.ts` : round transition logic
 - `src/lib/roundLogic.test.ts` : transition tests
 - `README.md`, `agents.md` : updated project notes
@@ -50,3 +51,4 @@
 - 2026-02-09: Scoring rule changed to "fewest votes gets -1" (ties also -1), with RESULT badges for round/overall bottom.
 - 2026-02-09: Refresh-safe leave handling added using pending-leave grace to avoid unintended host transfer on reload.
 - 2026-02-09: Home/Room UI polish applied (phase track, progress stats, primary action emphasis, improved Home layout).
+- 2026-02-10: RoomにSE設定（ON/OFF, 音量）を追加し、提出/投票/フェーズ遷移/エラー時にSE再生を実装（`public/assets/se/*.mp3` 想定）。
