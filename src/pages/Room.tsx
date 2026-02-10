@@ -31,6 +31,9 @@ const MAX_ROUND_LIMIT = 30;
 const LEAVE_GRACE_MS = 1400;
 const LEAVE_SWEEP_MS = 1000;
 const PENDING_LEAVE_PREFIX = "amber_true_pending_leave:";
+const ANSWER_TIME_LIMIT_MS = 20_000;
+const TIMEOUT_SUBMISSION_TEXT = "未回答";
+const ANSWER_SE_WARNING_SECONDS = new Set([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
 
 function userInitial(name: string): string {
   const normalized = name.trim();
@@ -170,9 +173,13 @@ export function Room() {
   const [roundLimitNotice, setRoundLimitNotice] = useState("");
   const [seEnabled, setSeEnabledState] = useState(() => getSeEnabled());
   const [seVolume, setSeVolumeState] = useState(() => getSeVolume());
+  const [answerDeadlineAt, setAnswerDeadlineAt] = useState<number | null>(null);
+  const [answerRemainingSec, setAnswerRemainingSec] = useState(ANSWER_TIME_LIMIT_MS / 1000);
 
   const [answerText, setAnswerText] = useState("");
   const prevPhaseRef = useRef<GameState["phase"] | null>(null);
+  const answerTimeoutHandledRef = useRef(false);
+  const answerCountdownPlayedRef = useRef<Set<number>>(new Set());
 
   async function loadPrompts() {
     setIsPromptsLoading(true);
@@ -281,6 +288,67 @@ export function Room() {
     }
     prevPhaseRef.current = game.phase;
   }, [game]);
+
+  useEffect(() => {
+    if (!game) return;
+    if (game.phase !== "ANSWER") {
+      setAnswerDeadlineAt(null);
+      setAnswerRemainingSec(ANSWER_TIME_LIMIT_MS / 1000);
+      answerTimeoutHandledRef.current = false;
+      answerCountdownPlayedRef.current.clear();
+      return;
+    }
+    setAnswerDeadlineAt(Date.now() + ANSWER_TIME_LIMIT_MS);
+    setAnswerRemainingSec(ANSWER_TIME_LIMIT_MS / 1000);
+    answerTimeoutHandledRef.current = false;
+    answerCountdownPlayedRef.current.clear();
+  }, [game?.phase, game?.round]);
+
+  useEffect(() => {
+    if (game?.phase !== "ANSWER" || answerDeadlineAt === null) return;
+    const timer = window.setInterval(() => {
+      const remainingMs = Math.max(0, answerDeadlineAt - Date.now());
+      const nextSec = Math.ceil(remainingMs / 1000);
+      setAnswerRemainingSec(nextSec);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [game?.phase, answerDeadlineAt]);
+
+  useEffect(() => {
+    if (!game || game.phase !== "ANSWER" || answerDeadlineAt === null) return;
+    if (answerTimeoutHandledRef.current) return;
+    const delay = Math.max(0, answerDeadlineAt - Date.now());
+    const timeoutId = window.setTimeout(() => {
+      if (answerTimeoutHandledRef.current) return;
+      answerTimeoutHandledRef.current = true;
+      applyGameUpdate((prev) => {
+        if (prev.phase !== "ANSWER") return prev;
+        const activeIds =
+          prev.activeMemberIds.length > 0
+            ? prev.activeMemberIds.filter((id) => Boolean(prev.members[id]))
+            : Object.keys(prev.members);
+        const submissions = { ...prev.submissions };
+        for (const id of activeIds) {
+          if (!submissions[id]) {
+            submissions[id] = { text: TIMEOUT_SUBMISSION_TEXT, submittedAt: Date.now() };
+          }
+        }
+        return toVoteState({
+          ...prev,
+          submissions,
+        });
+      });
+    }, delay);
+    return () => window.clearTimeout(timeoutId);
+  }, [game, answerDeadlineAt]);
+
+  useEffect(() => {
+    if (game?.phase !== "ANSWER") return;
+    if (!ANSWER_SE_WARNING_SECONDS.has(answerRemainingSec)) return;
+    if (answerCountdownPlayedRef.current.has(answerRemainingSec)) return;
+    answerCountdownPlayedRef.current.add(answerRemainingSec);
+    playSe("countdown");
+  }, [game?.phase, answerRemainingSec]);
 
   if (promptsError) {
     return (
@@ -801,7 +869,9 @@ export function Room() {
         </div>
         <div className="phase-stats muted">
           {game.phase === "ANSWER" && (
-            <span>提出進捗: {submittedCount}/{activeMemberIds.length}（未提出 {activeMemberIds.length - submittedCount}）</span>
+            <span>
+              提出進捗: {submittedCount}/{activeMemberIds.length}（未提出 {activeMemberIds.length - submittedCount}） / 残り {answerRemainingSec} 秒
+            </span>
           )}
           {game.phase === "VOTE" && (
             <span>ダサ投票進捗: {votedCount}/{activeMemberIds.length}（未投票 {activeMemberIds.length - votedCount}）</span>
@@ -827,6 +897,9 @@ export function Room() {
         {game.phase === "ANSWER" && (
           <div className="section">
             <div className="muted">回答を入力して送信（モック：ローカルのみ）</div>
+            <div className="muted" style={{ marginTop: 8 }}>
+              残り {answerRemainingSec} 秒。時間切れで未提出者は「未回答」として自動提出されます。
+            </div>
             {canUseDebugButton && (
               <div className="row" style={{ marginTop: 8 }}>
                 <button className="btn btn--ghost" onClick={activateDebugRound}>

@@ -1,6 +1,6 @@
 import { getSeEnabled, getSeVolume } from "./storage";
 
-export type SeKey = "submit" | "vote" | "phase" | "result" | "finalResult" | "error";
+export type SeKey = "submit" | "vote" | "phase" | "result" | "finalResult" | "countdown" | "error";
 
 const SE_PATHS: Record<SeKey, string> = {
   submit: "assets/se/submit.mp3",
@@ -8,6 +8,7 @@ const SE_PATHS: Record<SeKey, string> = {
   phase: "assets/se/phase.mp3",
   result: "assets/se/result.mp3",
   finalResult: "assets/se/final_result.mp3",
+  countdown: "assets/se/countdown.mp3",
   error: "assets/se/error.mp3",
 };
 
