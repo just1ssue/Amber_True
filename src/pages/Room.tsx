@@ -272,7 +272,9 @@ export function Room() {
       return;
     }
     if (prevPhaseRef.current === game.phase) return;
-    if (game.phase === "RESULT" || game.phase === "FINAL_RESULT") {
+    if (game.phase === "FINAL_RESULT") {
+      playSe("finalResult");
+    } else if (game.phase === "RESULT") {
       playSe("result");
     } else {
       playSe("phase");
